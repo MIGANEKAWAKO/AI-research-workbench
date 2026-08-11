@@ -1,0 +1,179 @@
+from __future__ import annotations
+
+import json
+from typing import Any, AsyncGenerator, Dict, List
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse, StreamingResponse
+from openai import AsyncOpenAI
+
+from .config import settings
+from .prompts import (
+    AI_ERROR_MESSAGE,
+    INVALID_TASK_ERROR,
+    MISSING_MESSAGES_ERROR,
+    MISSING_TEXT_ERROR,
+    SYSTEM_PROMPT_TEMPLATE,
+    TASK_PROMPTS,
+)
+
+
+app = FastAPI(title="AI Note Server")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def normalize_role(role: Any) -> Any:
+    return "assistant" if role == "ai" else role
+
+
+def _sse_data(payload: Dict[str, Any]) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _build_messages(payload: Dict[str, Any]) -> Dict[str, Any]:
+    task_type = payload.get("taskType")
+    text = payload.get("text")
+    messages = payload.get("messages")
+    note_context = payload.get("noteContext")
+
+    if task_type or text:
+        prompt = TASK_PROMPTS.get(task_type)
+
+        if not prompt:
+            return {"error": INVALID_TASK_ERROR}
+
+        if not isinstance(text, str) or not text.strip():
+            return {"error": MISSING_TEXT_ERROR}
+
+        return {
+            "messages": [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": text.strip()},
+            ]
+        }
+
+    if not isinstance(messages, list):
+        return {"error": MISSING_MESSAGES_ERROR}
+
+    formatted_messages: List[Dict[str, Any]] = []
+    for item in messages:
+        if isinstance(item, dict):
+            role = normalize_role(item.get("role"))
+            content = item.get("content")
+        else:
+            role = None
+            content = None
+        formatted_messages.append({"role": role, "content": content})
+
+    note_context_text = note_context if isinstance(note_context, str) and note_context.strip() else "无"
+
+    return {
+        "messages": [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT_TEMPLATE.format(note_context=note_context_text),
+            },
+            *formatted_messages,
+        ]
+    }
+
+
+async def _stream_chat_completion(messages: List[Dict[str, Any]]) -> AsyncGenerator[str, None]:
+    yield ": \n\n"
+
+    client = None
+    try:
+        client = AsyncOpenAI(
+            api_key=settings.deepseek_api_key,
+            base_url=settings.deepseek_base_url,
+        )
+        stream = await client.chat.completions.create(
+            model="deepseek-chat",
+            messages=messages,
+            stream=True,
+        )
+
+        async for chunk in stream:
+            content = None
+            if getattr(chunk, "choices", None):
+                delta = chunk.choices[0].delta
+                content = getattr(delta, "content", None)
+
+            if content:
+                yield _sse_data({"content": content})
+    except Exception as exc:  # pragma: no cover - runtime integration path
+        print("DeepSeek API Error:", repr(exc))
+        yield _sse_data({"error": AI_ERROR_MESSAGE})
+    finally:
+        try:
+            if client is not None:
+                await client.close()
+        except Exception:
+            pass
+
+
+async def _stream_error(error_message: str) -> AsyncGenerator[str, None]:
+    yield ": \n\n"
+    yield _sse_data({"error": error_message})
+
+
+@app.post("/api/chat")
+async def chat(request: Request):
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            payload = {}
+    except Exception:
+        payload = {}
+
+    completion_messages = _build_messages(payload)
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+
+    if "error" in completion_messages:
+        return StreamingResponse(
+            _stream_error(completion_messages["error"]),
+            media_type="text/event-stream",
+            headers=headers,
+            status_code=200,
+        )
+
+    return StreamingResponse(
+        _stream_chat_completion(completion_messages["messages"]),
+        media_type="text/event-stream",
+        headers=headers,
+        status_code=200,
+    )
+
+
+@app.get("/")
+async def root():
+    return {"message": "AI Note Server is running"}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@app.get("/ping", response_class=PlainTextResponse)
+async def ping():
+    return "pong"
+
+
+if __name__ == "__main__":  # pragma: no cover
+    import uvicorn
+
+    uvicorn.run("app.main:app", host="0.0.0.0", port=settings.port, reload=True)
+
