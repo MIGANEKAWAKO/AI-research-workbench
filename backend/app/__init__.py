@@ -1,0 +1,2 @@
+"""FastAPI note server package."""
+
