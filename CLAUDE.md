@@ -56,11 +56,11 @@ AI research workbench/
 
 ## 开发进度（截至 2026-08-10）
 
-| 状态 | 内容 |
-|---|---|
-| ✅ 完成 | 依赖清理：移除 dexie / dexie-react-hooks / react-router-dom，删除 db.ts，类型迁入 src/types/，Dexie 调用全部替换为 `useDataStore` 内存数据源，构建通过 |
-| ⚠️ 当前 | 存储层为**临时内存实现**（`useDataStore`），数据刷新即丢——预期行为，等 F1 接文件系统 |
-| ⬜ 下一步 | WBS B1（后端依赖+配置）或继续前端清理 |
+| 状态    | 内容                                                                                                                    |
+| ----- | --------------------------------------------------------------------------------------------------------------------- |
+| ✅ 完成  | 依赖清理：移除 dexie / dexie-react-hooks / react-router-dom，删除 db.ts，类型迁入 src/types/，Dexie 调用全部替换为 `useDataStore` 内存数据源，构建通过 |
+| ⚠️ 当前 | 存储层为**临时内存实现**（`useDataStore`），数据刷新即丢——预期行为，等 F1 接文件系统                                                                |
+| ⬜ 下一步 | WBS B1（后端依赖+配置）或继续前端清理                                                                                                |
 
 **前端当前存储架构**：`useDataStore`（Zustand）是唯一数据入口；`useNotes.ts` 保持对外 API 签名（saveNote/getNote），编辑器零改动。F1 阶段把 actions 内部换成 StorageAdapter 文件读写即可，UI 层无需改动。
 
@@ -104,7 +104,6 @@ cd backend && .venv/Scripts/python -m uvicorn app.main:app --port 3001 --reload
 - **数据源是内存态**：刷新页面后笔记/集合丢失（F1 前属预期）
 - 后端错误约定：一律 HTTP 200 + SSE `{"error": ...}` 事件，前端按 `data.error` 分支处理
 - 后端 config.py 为 dataclass + dotenv，无 `.env` 时 key 为空串
-- 前端目前无 git 仓库：**建议 `git init` 并提交基线**，便于回退
 
 ## 协作契约要点（完整版见 AI协作开发流程.md）
 
@@ -114,3 +113,16 @@ cd backend && .venv/Scripts/python -m uvicorn app.main:app --port 3001 --reload
 - **禁止代写**：RAG 检索注入、GB/T 7714 格式化、StorageAdapter 接口（用户亲手写，只可讲解+审查）
 - 配套产物：`docs/模块说明.md`、`docs/面试问答.md`、ADR 决策记录，随开发维护
 - 所有交流与文档用中文
+
+## 分支结构
+
+  master（发布基线，只接受合并）
+  ├─ frontend ── 前端开发线（F1-F7 都在这里）
+  └─ backend  ── 后端开发线（B1-B8 都在这里）
+
+## 约定与注意
+
+- 目录纪律：**frontend 分支只改 frontend/**，**backend 分支只改 backend/**。若有跨端改动，回到 master 开 feature 分支做
+- 文档共享：CLAUDE.md、需求文档、docs/ 属两份共享，两边改动会重复提交——可以接受；后续如需要可用 git merge backend 到 frontend 定期同步
+- 演进路径：到具体功能时，**从对应开发分支切 feature/xxx**，**完成合并回开发分支**；hotfix 从 master 切出修完合回 master 并同步两个开发分支
+- 提交粒度：**每个 WBS 任务一个 commit**，git log 即开发时间线
