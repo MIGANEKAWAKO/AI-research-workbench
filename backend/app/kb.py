@@ -1,0 +1,167 @@
+"""知识库核心：Chroma 持久化 + SiliconFlow embedding + 中文分块 + 增删查。
+
+同步实现（langchain embedding/Chroma 仅同步 API）；async 路由调用时用
+anyio.to_thread 包一层，避免阻塞事件循环（由调用方决定调度方式）。
+
+数据流：文本/PDF → split_pages（页内分块，块带 page 元数据）
+      → upsert_document（幂等：先删旧块再 add）→ .kb/chroma_db 持久化
+      → retrieve（相似度检索，where 支持单篇限定）
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pypdf import PdfReader
+
+from .config import settings
+
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 50
+COLLECTION_NAME = "literature"
+
+# 分隔符含中文标点：英文默认分隔符会把中文句子切碎，块边界落在句号处
+SPLIT_SEPARATORS = ["\n\n", "\n", "。", "！", "？", "；", "，", " ", ""]
+
+
+def _default_vault_path() -> Path:
+    """vault 路径优先级：.env VAULT_PATH → 开发默认 backend/vault（见 ADR-0001）。"""
+    if settings.vault_path:
+        return Path(settings.vault_path)
+    return Path(__file__).resolve().parent.parent / "vault"
+
+
+def _kb_root() -> Path:
+    if settings.kb_dir:
+        return Path(settings.kb_dir)
+    return _default_vault_path() / ".kb"
+
+
+def _chroma_dir() -> Path:
+    return _kb_root() / "chroma_db"
+
+
+def _get_embeddings() -> OpenAIEmbeddings:
+    if not settings.siliconflow_api_key:
+        raise RuntimeError("未配置 SILICONFLOW_API_KEY，无法初始化知识库（见 .env）")
+    return OpenAIEmbeddings(
+        model=settings.embedding_model,
+        api_key=settings.siliconflow_api_key,
+        base_url=settings.siliconflow_base_url,
+    )
+
+
+_collection: Chroma | None = None
+
+
+def get_collection() -> Chroma:
+    """懒加载单例：首次调用才建立 Chroma 持久化连接 + embedding 客户端。"""
+    global _collection
+    if _collection is None:
+        _collection = Chroma(
+            collection_name=COLLECTION_NAME,
+            embedding_function=_get_embeddings(),
+            persist_directory=str(_chroma_dir()),
+        )
+    return _collection
+
+
+def extract_pdf_pages(pdf_path: str | Path) -> list[str]:
+    """pypdf 逐页抽取文本，保留页边界（块元数据 page 依赖它）。"""
+    reader = PdfReader(str(pdf_path))
+    return [page.extract_text() or "" for page in reader.pages]
+
+
+def split_pages(pages: list[str]) -> list[Document]:
+    """每页独立分块，块不跨页，metadata.page = 页号（从 1 起）。"""
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+        separators=SPLIT_SEPARATORS,
+    )
+    docs: list[Document] = []
+    for page_no, page_text in enumerate(pages, start=1):
+        for chunk in splitter.split_text(page_text):
+            if chunk.strip():
+                docs.append(Document(page_content=chunk, metadata={"page": page_no}))
+    return docs
+
+
+def upsert_document(
+    doc_type: str,
+    doc_id: str,
+    title: str,
+    pages: list[str] | None = None,
+    text: str | None = None,
+) -> int:
+    """写入文档向量（幂等：先删旧块再插），返回新增块数。
+
+    doc_type: note | paper；pages 为逐页文本（paper），text 为纯文本（note）。
+    """
+    if doc_type not in ("note", "paper"):
+        raise ValueError(f"doc_type 只能是 note/paper，收到 {doc_type!r}")
+    if pages is None:
+        pages = [text or ""]
+    chunks = split_pages(pages)
+    if not chunks:
+        return 0
+    for chunk in chunks:
+        chunk.metadata.update(
+            {"docType": doc_type, "docId": doc_id, "title": title}
+        )
+    collection = get_collection()
+    collection.delete(where={"docId": doc_id})
+    collection.add_documents(chunks)
+    return len(chunks)
+
+
+def delete_document(doc_id: str) -> None:
+    get_collection().delete(where={"docId": doc_id})
+
+
+def retrieve(query: str, doc_id: str | None = None, top_k: int = 5) -> list[Document]:
+    """相似度检索；doc_id 指定时按单篇限定（where 过滤），默认全局检索。"""
+    filter_dict = {"docId": doc_id} if doc_id else None
+    return get_collection().similarity_search(query, k=top_k, filter=filter_dict)
+
+
+if __name__ == "__main__":  # CLI：python -m app.kb <upsert|query|delete> ...
+    import sys
+
+    def usage() -> None:
+        print("用法:")
+        print("  python -m app.kb upsert <doc_type> <doc_id> <title> <文本>")
+        print("  python -m app.kb query <查询词> [doc_id]")
+        print("  python -m app.kb delete <doc_id>")
+
+    args = sys.argv[1:]
+    if not args or args[0] not in ("upsert", "query", "delete"):
+        usage()
+        sys.exit(1)
+
+    try:
+        if args[0] == "upsert":
+            if len(args) < 5:
+                usage()
+                sys.exit(1)
+            count = upsert_document(args[1], args[2], args[3], text=args[4])
+            print(f"已写入 {count} 块（doc_id={args[2]}）")
+        elif args[0] == "query":
+            if len(args) < 2:
+                usage()
+                sys.exit(1)
+            doc_id = args[2] if len(args) > 2 else None
+            results = retrieve(args[1], doc_id=doc_id)
+            for i, doc in enumerate(results, start=1):
+                print(f"[{i}] page={doc.metadata.get('page')} "
+                      f"docId={doc.metadata.get('docId')}: {doc.page_content[:80]}...")
+        elif args[0] == "delete":
+            delete_document(args[1])
+            print(f"已删除 doc_id={args[1]}")
+    except Exception as exc:  # 网络/key 错误在 CLI 直接展示
+        print(f"失败: {exc!r}")
+        sys.exit(1)

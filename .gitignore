@@ -19,6 +19,7 @@ npm-debug.log*
 .vite/
 eslintcache/
 .kb/
+backend/vault/
 
 # 编辑器
 .vscode/*
