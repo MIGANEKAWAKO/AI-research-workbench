@@ -17,9 +17,12 @@ from .prompts import (
     SYSTEM_PROMPT_TEMPLATE,
     TASK_PROMPTS,
 )
+from .routers import fs
 
 
 app = FastAPI(title="AI Note Server")
+
+app.include_router(fs.router, prefix="/api/fs")
 
 app.add_middleware(
     CORSMiddleware,
@@ -96,7 +99,7 @@ async def _stream_chat_completion(messages: List[Dict[str, Any]]) -> AsyncGenera
             base_url=settings.deepseek_base_url,
         )
         stream = await client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
             messages=messages,
             stream=True,
         )

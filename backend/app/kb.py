@@ -19,6 +19,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
 from .config import settings
+from .vault import chroma_dir
 
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
@@ -26,23 +27,6 @@ COLLECTION_NAME = "literature"
 
 # 分隔符含中文标点：英文默认分隔符会把中文句子切碎，块边界落在句号处
 SPLIT_SEPARATORS = ["\n\n", "\n", "。", "！", "？", "；", "，", " ", ""]
-
-
-def _default_vault_path() -> Path:
-    """vault 路径优先级：.env VAULT_PATH → 开发默认 backend/vault（见 ADR-0001）。"""
-    if settings.vault_path:
-        return Path(settings.vault_path)
-    return Path(__file__).resolve().parent.parent / "vault"
-
-
-def _kb_root() -> Path:
-    if settings.kb_dir:
-        return Path(settings.kb_dir)
-    return _default_vault_path() / ".kb"
-
-
-def _chroma_dir() -> Path:
-    return _kb_root() / "chroma_db"
 
 
 def _get_embeddings() -> OpenAIEmbeddings:
@@ -65,7 +49,7 @@ def get_collection() -> Chroma:
         _collection = Chroma(
             collection_name=COLLECTION_NAME,
             embedding_function=_get_embeddings(),
-            persist_directory=str(_chroma_dir()),
+            persist_directory=str(chroma_dir()),
         )
     return _collection
 
