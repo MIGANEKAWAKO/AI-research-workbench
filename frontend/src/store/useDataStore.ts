@@ -2,24 +2,26 @@ import { create } from 'zustand'
 import type { Note, Collection } from '@/types'
 import type { FsEntry } from '@/services/storage/types'
 import { createStorageAdapter } from '@/services/storage'
+import { serializeNote, parseNoteFile } from '@/lib/note-file'
 
 /**
- * 数据源：内存缓存 + StorageAdapter 文件持久化（F1）。
+ * 数据源：内存缓存 + StorageAdapter 文件持久化（F1 抽象层，F2 文件格式 Markdown 化）。
  *
  * 数据流：
  *   UI 组件 → useDataStore（内存缓存，响应式）→ StorageAdapter → vault 文件
- *   loadAll   ：扫描 vault/笔记/*.md → 读入内存（启动时调用一次）
- *   saveNote  ：写文件 + 更新内存（对外保持同步签名，写文件为异步 fire-and-forget）
+ *   loadAll   ：读 .kb/collections.json + 扫描 vault/笔记/*.md → 解析 frontmatter → 内存
+ *   saveNote  ：serializeNote（frontmatter + Markdown）→ 写文件 + 更新内存
  *   deleteNote：删文件 + 更新内存
  *
- * F1 临时文件约定（F2 演进为 frontmatter + 稳定 id，届时 UI 层无需改动）：
- *   - 笔记文件：vault/笔记/{新建时的标题}.md，内容为 Tiptap HTML（F2 换 Markdown）
- *   - 文件名在新建时确定后不变；编辑改变 title 只更新内存，不搬文件
- *   - id 为会话内自增，刷新后按文件名重新分配
- *   - 集合仍为内存态（F2 迁移 collections.json）
+ * 文件格式（F2，PRD 5.4）：vault/笔记/{文件名}.md = YAML frontmatter + Markdown 正文
+ *   - frontmatter 字段：title / collection(集合名，Obsidian 兼容) / tags / cites
+ *   - 文件名在新建时确定后不变；编辑改变 title 只更新 frontmatter，不搬文件
+ *   - 集合定义持久化于 .kb/collections.json：[{id, name, createdAt}]
+ *   - id 为会话内自增，刷新后重新分配（F3 改稳定 id）
  */
 
 const NOTES_DIR = '笔记'
+const COLLECTIONS_PATH = '.kb/collections.json'
 
 const adapter = createStorageAdapter()
 
@@ -44,11 +46,33 @@ const uniqueNotePath = (title: string): string => {
     return `${NOTES_DIR}/${name}.md`
 }
 
+/** 读集合定义文件（.kb/collections.json）；不存在/损坏 → 空列表 */
+const loadCollectionsFile = async (): Promise<Collection[]> => {
+    try {
+        const raw = await adapter.read(COLLECTIONS_PATH)
+        const parsed = JSON.parse(raw)
+        if (!Array.isArray(parsed)) return []
+        return parsed.filter(
+            (c): c is Collection =>
+                c && typeof c.name === 'string' && typeof c.createdAt === 'number'
+        )
+    } catch {
+        return []
+    }
+}
+
+/** 写集合定义文件（fire-and-forget，失败只记日志） */
+const saveCollectionsFile = (collections: Collection[]) => {
+    adapter
+        .write(COLLECTIONS_PATH, JSON.stringify(collections, null, 2))
+        .catch((e) => console.error('集合写入失败:', e))
+}
+
 interface DataState {
     notes: Note[]
     collections: Collection[]
 
-    // 从 vault 加载全部笔记到内存（F1 起从文件读取，此前为空操作）
+    // 从 vault 加载全部笔记与集合到内存（应用启动时调用）
     loadAll: () => Promise<void>
 
     // 保存笔记：有 id 则更新，无 id 则新建（兼容原 Dexie put 语义）
@@ -61,12 +85,20 @@ interface DataState {
     moveNoteToCollection: (noteId: number, collectionId: number | undefined) => void
 }
 
-export const useDataStore = create<DataState>((set) => ({
+export const useDataStore = create<DataState>((set, get) => ({
     notes: [],
     collections: [],
 
     loadAll: async () => {
-        // 1. 扫描笔记目录；目录不存在（首次启动）则创建
+        // 1. 集合定义：读 .kb/collections.json（不存在 → 空）
+        const collections = await loadCollectionsFile()
+        if (collections.length > 0) {
+            nextCollectionId = Math.max(...collections.map((c) => c.id ?? 0)) + 1
+        }
+        const nameToId = (name?: string) =>
+            collections.find((c) => c.name === name)?.id
+
+        // 2. 扫描笔记目录；目录不存在（首次启动）则创建
         let entries: FsEntry[] = []
         try {
             entries = await adapter.list(NOTES_DIR)
@@ -74,18 +106,22 @@ export const useDataStore = create<DataState>((set) => ({
             await adapter.mkdir(NOTES_DIR).catch(() => {})
         }
 
-        // 2. 逐个读取 .md 文件 → Note（单个文件失败跳过，不阻断整体加载）
+        // 3. 逐个读取 .md 文件 → 解析 frontmatter → Note（单个失败跳过，不阻断）
         const notes: Note[] = []
         for (const entry of entries) {
             if (entry.isDir || !entry.name.endsWith('.md')) continue
             try {
-                const content = await adapter.read(entry.path)
+                const raw = await adapter.read(entry.path)
+                const parsed = parseNoteFile(raw, entry.name)
                 const id = nextNoteId++
                 idToPath.set(id, entry.path)
                 notes.push({
                     id,
-                    title: entry.name.replace(/\.md$/, ''),
-                    content,
+                    title: parsed.title,
+                    content: parsed.content,
+                    tags: parsed.tags,
+                    cites: parsed.cites,
+                    collectionId: nameToId(parsed.collectionName),
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
                 })
@@ -93,26 +129,39 @@ export const useDataStore = create<DataState>((set) => ({
                 console.warn(`读取笔记失败，跳过: ${entry.path}`, e)
             }
         }
-        set({ notes })
+        set({ notes, collections })
     },
 
     saveNote: (note) => {
+        const collectionName = note.collectionId !== undefined
+            ? get().collections.find((c) => c.id === note.collectionId)?.name
+            : undefined
+
         if (note.id === undefined) {
-            // 新建：分配 id → 确定唯一文件路径 → 写文件 + 更新内存
+            // 新建：分配 id → 确定唯一文件路径 → 写文件（frontmatter + markdown）+ 更新内存
             const id = nextNoteId++
             const now = Date.now()
             const path = uniqueNotePath(note.title)
             idToPath.set(id, path)
             const full: Note = { ...note, id, createdAt: now, updatedAt: now }
-            adapter.write(path, note.content).catch((e) => console.error('笔记写入失败:', path, e))
+            adapter
+                .write(path, serializeNote(full, collectionName))
+                .catch((e) => console.error('笔记写入失败:', path, e))
             set((state) => ({ notes: [full, ...state.notes] }))
             return id
         }
 
-        // 更新：写回原文件（路径新建时已定，title 变化不搬文件）
+        // 更新：写回原文件（路径新建时已定，title 变化只改 frontmatter 不搬文件）
         const path = idToPath.get(note.id)
         if (path) {
-            adapter.write(path, note.content ?? '').catch((e) => console.error('笔记写入失败:', path, e))
+            const merged: Note = {
+                ...get().notes.find((n) => n.id === note.id),
+                ...note,
+                updatedAt: Date.now(),
+            } as Note
+            adapter
+                .write(path, serializeNote(merged, collectionName))
+                .catch((e) => console.error('笔记写入失败:', path, e))
         }
         set((state) => ({
             notes: state.notes.map((n) =>
@@ -134,21 +183,43 @@ export const useDataStore = create<DataState>((set) => ({
     },
 
     addCollection: (name) => {
-        set((state) => ({
-            collections: [...state.collections, { id: nextCollectionId++, name, createdAt: Date.now() }],
-        }))
+        const id = nextCollectionId++
+        const collections = [
+            ...get().collections,
+            { id, name, createdAt: Date.now() },
+        ]
+        set({ collections })
+        saveCollectionsFile(collections)
     },
 
-    deleteCollection: (id) =>
+    deleteCollection: (id) => {
+        // 集合删除后：笔记变为未分类（内存立即生效；文件 frontmatter 的 collection
+        // 字段在下次保存时清除，重载时因集合不存在自动映射为未分类，可接受）
+        const collections = get().collections.filter((c) => c.id !== id)
         set((state) => ({
-            collections: state.collections.filter((c) => c.id !== id),
+            collections,
             notes: state.notes.map((n) =>
                 n.collectionId === id ? { ...n, collectionId: undefined } : n
             ),
-        })),
+        }))
+        saveCollectionsFile(collections)
+    },
 
-    moveNoteToCollection: (noteId, collectionId) =>
+    moveNoteToCollection: (noteId, collectionId) => {
         set((state) => ({
             notes: state.notes.map((n) => (n.id === noteId ? { ...n, collectionId } : n)),
-        })),
+        }))
+
+        // 集合归属变化 → 立即重写该笔记文件（更新 frontmatter 的 collection 字段）
+        const note = get().notes.find((n) => n.id === noteId)
+        const path = idToPath.get(noteId)
+        if (!note || !path) return
+        const collectionName =
+            collectionId !== undefined
+                ? get().collections.find((c) => c.id === collectionId)?.name
+                : undefined
+        adapter
+            .write(path, serializeNote(note, collectionName))
+            .catch((e) => console.error('笔记写入失败:', path, e))
+    },
 }))

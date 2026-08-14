@@ -60,10 +60,11 @@ AI research workbench/
 | ----- | --------------------------------------------------------------------------------------------------------------------- |
 | ✅ 完成  | 依赖清理：移除 dexie / dexie-react-hooks / react-router-dom，删除 db.ts，类型迁入 src/types/，Dexie 调用全部替换为 `useDataStore` 内存数据源，构建通过 |
 | ✅ 完成  | **F1 StorageAdapter 抽象**：接口 6 方法（用户写）+ `HttpFsAdapter`（fetch 后端 `/api/fs/*`）+ 工厂 + `useDataStore` 文件持久化（loadAll/saveNote/deleteNote），UI 层零改动，端到端验证 8/8 |
-| ⚠️ 当前 | 笔记可读写 vault 文件（开发期走后端 `/api/fs/*`）；**文件内容仍为 HTML、集合仍内存态**——F2 处理；刷新后 id 重新分配（F3 改稳定 id） |
-| ⬜ 下一步 | WBS F2（笔记 Markdown 化：gray-matter frontmatter + tiptap-markdown 序列化 + 集合迁移 collections.json） |
+| ✅ 完成  | **F2 笔记 Markdown 化**：`src/lib/note-file.ts`（gray-matter frontmatter 读写纯函数）+ editor 保存改 `getMarkdown()` + 集合持久化 `.kb/collections.json` + tiptap-markdown 类型补充，纯函数 16/16 + 端到端 20/20 验证通过 |
+| ⚠️ 当前 | 笔记以 Markdown + frontmatter（title/collection/tags/cites）落盘，Obsidian 可直接打开；**注意：tiptap-markdown@0.9 无 extendMarkdown**（自定义节点序列化能力缺失，背景色降级，引用徽章序列化推迟 F6 前置调研） |
+| ⬜ 下一步 | WBS F3（侧边栏/列表文件模式改造：数据源文件扫描 + 30s 轮询兜底 + 搜索/拖拽/重命名适配）或 F4（文献库 UI，依赖 B5） |
 
-**前端当前存储架构**：`useDataStore`（Zustand）仍是唯一数据入口（内存缓存 = 响应式数据源）；`useNotes.ts` 保持对外 API 签名（saveNote/getNote），编辑器零改动。F1 已完成：actions 内部调用 `StorageAdapter`（开发期 `HttpFsAdapter` → 后端 `/api/fs/*` 读写 vault 文件），发布期换 Tauri 实现只需改工厂 `src/services/storage/index.ts` 一处。F2 阶段把文件格式演进为 Markdown + frontmatter，UI 层仍无需改动。
+**前端当前存储架构**：`useDataStore`（Zustand）仍是唯一数据入口（内存缓存 = 响应式数据源）；`useNotes.ts` 保持对外 API 签名（saveNote/getNote），编辑器零改动。存储链路：UI → useDataStore → `StorageAdapter`（开发期 `HttpFsAdapter` → 后端 `/api/fs/*`）→ vault 文件（笔记 = Markdown + frontmatter，集合 = `.kb/collections.json`）。发布期换 Tauri 实现只需改工厂 `src/services/storage/index.ts` 一处。F3 起 UI 层将接触文件扫描/轮询，但 useNotes 对外 API 仍保持稳定。
 
 ## 必读文档（按序）
 
