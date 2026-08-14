@@ -28,6 +28,7 @@ const SideBar = () => {
     // 订阅内存数据源（Zustand 响应式，行为与原 useLiveQuery 等价）
     const notes = useDataStore((state) => state.notes);
     const collections = useDataStore((state) => state.collections);
+    const backendOnline = useDataStore((state) => state.backendOnline);
     const [searchKeyword, setSearchKeyword] = useState('');
 
     const activeNoteId = useNoteStore((state) => state.activeNoteId);
@@ -129,6 +130,12 @@ const SideBar = () => {
         <DndContext onDragEnd={handleDragEnd} sensors={sensors}>
             <Sidebar variant="floating" collapsible="icon">
                 <SidebarHeader>
+                    {backendOnline === false && (
+                        <div className="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                            ⚠ 无法连接存储服务（localhost:3001）<br />
+                            笔记不会被保存，请先启动后端
+                        </div>
+                    )}
                     <div className="relative">
                         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
