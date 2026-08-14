@@ -8,9 +8,16 @@ import AIPanel from '@/components/AIPanel'
 import SideBar from '@/components/SiderBar/index';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useNoteStore } from "@/store/useNoteStore";
+import { useDataStore } from "@/store/useDataStore";
+import { useEffect } from 'react';
 
 const Home = () => {
     const isAiPanelOpen = useNoteStore((state) => state.isAiPanelOpen);
+
+    // F1：应用启动时从 vault 加载笔记（扫描 vault/笔记/*.md）
+    useEffect(() => {
+        useDataStore.getState().loadAll()
+    }, [])
 
     return (
         <>
