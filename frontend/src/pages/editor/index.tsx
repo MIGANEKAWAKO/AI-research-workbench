@@ -75,7 +75,7 @@ const Editor = () => {
                 const existingNote = await getNote(targetId)
                 if (!existingNote) return
 
-                const content = editorInstance.getHTML()
+                const content = editorInstance.storage.markdown.getMarkdown()
                 const firstLine =
                     editorInstance
                         .getText()
