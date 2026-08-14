@@ -61,16 +61,19 @@ const loadCollectionsFile = async (): Promise<Collection[]> => {
     }
 }
 
-/** 写集合定义文件（fire-and-forget，失败只记日志） */
-const saveCollectionsFile = (collections: Collection[]) => {
-    adapter
-        .write(COLLECTIONS_PATH, JSON.stringify(collections, null, 2))
-        .catch((e) => console.error('集合写入失败:', e))
-}
+/** 写集合定义文件（返回 Promise，由调用方处理失败提示） */
+const saveCollectionsFile = (collections: Collection[]): Promise<void> =>
+    adapter.write(COLLECTIONS_PATH, JSON.stringify(collections, null, 2))
 
 interface DataState {
     notes: Note[]
     collections: Collection[]
+
+    /**
+     * 后端连接状态：null=尚未确认（初始），true=在线，false=离线。
+     * 离线时 UI 显示警告条（防止"静默失败"：loadAll 空列表 / 保存丢数据无感知）。
+     */
+    backendOnline: boolean | null
 
     // 从 vault 加载全部笔记与集合到内存（应用启动时调用）
     loadAll: () => Promise<void>
@@ -85,9 +88,13 @@ interface DataState {
     moveNoteToCollection: (noteId: number, collectionId: number | undefined) => void
 }
 
+/** 判断失败是否为网络层错误（fetch 拒绝 = 后端不可达），HTTP 错误（403/404 等）不算离线 */
+const isNetworkError = (e: unknown) => e instanceof TypeError
+
 export const useDataStore = create<DataState>((set, get) => ({
     notes: [],
     collections: [],
+    backendOnline: null,
 
     loadAll: async () => {
         // 1. 集合定义：读 .kb/collections.json（不存在 → 空）
@@ -98,11 +105,16 @@ export const useDataStore = create<DataState>((set, get) => ({
         const nameToId = (name?: string) =>
             collections.find((c) => c.name === name)?.id
 
-        // 2. 扫描笔记目录；目录不存在（首次启动）则创建
+        // 2. 扫描笔记目录；网络失败 → 标记离线并降级为空列表；目录不存在 → 创建
         let entries: FsEntry[] = []
         try {
             entries = await adapter.list(NOTES_DIR)
-        } catch {
+        } catch (e) {
+            if (isNetworkError(e)) {
+                console.error('无法连接存储服务（后端未启动？）', e)
+                set({ notes: [], collections, backendOnline: false })
+                return
+            }
             await adapter.mkdir(NOTES_DIR).catch(() => {})
         }
 
@@ -129,7 +141,7 @@ export const useDataStore = create<DataState>((set, get) => ({
                 console.warn(`读取笔记失败，跳过: ${entry.path}`, e)
             }
         }
-        set({ notes, collections })
+        set({ notes, collections, backendOnline: true })
     },
 
     saveNote: (note) => {
@@ -146,7 +158,11 @@ export const useDataStore = create<DataState>((set, get) => ({
             const full: Note = { ...note, id, createdAt: now, updatedAt: now }
             adapter
                 .write(path, serializeNote(full, collectionName))
-                .catch((e) => console.error('笔记写入失败:', path, e))
+                .then(() => set({ backendOnline: true }))
+                .catch((e) => {
+                    console.error('笔记写入失败:', path, e)
+                    if (isNetworkError(e)) set({ backendOnline: false })
+                })
             set((state) => ({ notes: [full, ...state.notes] }))
             return id
         }
@@ -161,7 +177,11 @@ export const useDataStore = create<DataState>((set, get) => ({
             } as Note
             adapter
                 .write(path, serializeNote(merged, collectionName))
-                .catch((e) => console.error('笔记写入失败:', path, e))
+                .then(() => set({ backendOnline: true }))
+                .catch((e) => {
+                    console.error('笔记写入失败:', path, e)
+                    if (isNetworkError(e)) set({ backendOnline: false })
+                })
         }
         set((state) => ({
             notes: state.notes.map((n) =>
@@ -175,7 +195,13 @@ export const useDataStore = create<DataState>((set, get) => ({
         const path = idToPath.get(id)
         if (path) {
             idToPath.delete(id)
-            adapter.delete(path).catch((e) => console.error('笔记删除失败:', path, e))
+            adapter
+                .delete(path)
+                .then(() => set({ backendOnline: true }))
+                .catch((e) => {
+                    console.error('笔记删除失败:', path, e)
+                    if (isNetworkError(e)) set({ backendOnline: false })
+                })
         }
         set((state) => ({
             notes: state.notes.filter((n) => n.id !== id),
@@ -190,6 +216,11 @@ export const useDataStore = create<DataState>((set, get) => ({
         ]
         set({ collections })
         saveCollectionsFile(collections)
+            .then(() => set({ backendOnline: true }))
+            .catch((e) => {
+                console.error('集合写入失败:', e)
+                if (isNetworkError(e)) set({ backendOnline: false })
+            })
     },
 
     deleteCollection: (id) => {
@@ -203,6 +234,11 @@ export const useDataStore = create<DataState>((set, get) => ({
             ),
         }))
         saveCollectionsFile(collections)
+            .then(() => set({ backendOnline: true }))
+            .catch((e) => {
+                console.error('集合写入失败:', e)
+                if (isNetworkError(e)) set({ backendOnline: false })
+            })
     },
 
     moveNoteToCollection: (noteId, collectionId) => {
@@ -220,6 +256,10 @@ export const useDataStore = create<DataState>((set, get) => ({
                 : undefined
         adapter
             .write(path, serializeNote(note, collectionName))
-            .catch((e) => console.error('笔记写入失败:', path, e))
+            .then(() => set({ backendOnline: true }))
+            .catch((e) => {
+                console.error('笔记写入失败:', path, e)
+                if (isNetworkError(e)) set({ backendOnline: false })
+            })
     },
 }))
