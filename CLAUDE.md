@@ -54,15 +54,16 @@ AI research workbench/
 └─ AI协作开发流程.md          # 协作契约（每次开发会话必读）
 ```
 
-## 开发进度（截至 2026-08-10）
+## 开发进度（截至 2026-08-14）
 
 | 状态    | 内容                                                                                                                    |
 | ----- | --------------------------------------------------------------------------------------------------------------------- |
 | ✅ 完成  | 依赖清理：移除 dexie / dexie-react-hooks / react-router-dom，删除 db.ts，类型迁入 src/types/，Dexie 调用全部替换为 `useDataStore` 内存数据源，构建通过 |
-| ⚠️ 当前 | 存储层为**临时内存实现**（`useDataStore`），数据刷新即丢——预期行为，等 F1 接文件系统                                                                |
-| ⬜ 下一步 | WBS B1（后端依赖+配置）或继续前端清理                                                                                                |
+| ✅ 完成  | **F1 StorageAdapter 抽象**：接口 6 方法（用户写）+ `HttpFsAdapter`（fetch 后端 `/api/fs/*`）+ 工厂 + `useDataStore` 文件持久化（loadAll/saveNote/deleteNote），UI 层零改动，端到端验证 8/8 |
+| ⚠️ 当前 | 笔记可读写 vault 文件（开发期走后端 `/api/fs/*`）；**文件内容仍为 HTML、集合仍内存态**——F2 处理；刷新后 id 重新分配（F3 改稳定 id） |
+| ⬜ 下一步 | WBS F2（笔记 Markdown 化：gray-matter frontmatter + tiptap-markdown 序列化 + 集合迁移 collections.json） |
 
-**前端当前存储架构**：`useDataStore`（Zustand）是唯一数据入口；`useNotes.ts` 保持对外 API 签名（saveNote/getNote），编辑器零改动。F1 阶段把 actions 内部换成 StorageAdapter 文件读写即可，UI 层无需改动。
+**前端当前存储架构**：`useDataStore`（Zustand）仍是唯一数据入口（内存缓存 = 响应式数据源）；`useNotes.ts` 保持对外 API 签名（saveNote/getNote），编辑器零改动。F1 已完成：actions 内部调用 `StorageAdapter`（开发期 `HttpFsAdapter` → 后端 `/api/fs/*` 读写 vault 文件），发布期换 Tauri 实现只需改工厂 `src/services/storage/index.ts` 一处。F2 阶段把文件格式演进为 Markdown + frontmatter，UI 层仍无需改动。
 
 ## 必读文档（按序）
 
