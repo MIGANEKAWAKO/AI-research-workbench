@@ -17,12 +17,13 @@ from .prompts import (
     SYSTEM_PROMPT_TEMPLATE,
     TASK_PROMPTS,
 )
-from .routers import fs
+from .routers import documents, fs
 
 
 app = FastAPI(title="AI Note Server")
 
 app.include_router(fs.router, prefix="/api/fs")
+app.include_router(documents.router, prefix="/api/documents")
 
 app.add_middleware(
     CORSMiddleware,
