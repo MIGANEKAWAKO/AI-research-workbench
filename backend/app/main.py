@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Dict, List
 
+import anyio
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from openai import AsyncOpenAI
 
 from .config import settings
+from .indexer import scan_and_index
 from .prompts import (
     AI_ERROR_MESSAGE,
     INVALID_TASK_ERROR,
@@ -17,13 +20,25 @@ from .prompts import (
     SYSTEM_PROMPT_TEMPLATE,
     TASK_PROMPTS,
 )
-from .routers import documents, fs
+from .routers import documents, fs, kb_api
 
 
-app = FastAPI(title="AI Note Server")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动自动扫描索引（失败不阻断启动，打印警告即可）
+    try:
+        await anyio.to_thread.run_sync(scan_and_index)
+        print("启动索引扫描完成")
+    except Exception as exc:
+        print("启动索引扫描失败（继续启动）:", repr(exc))
+    yield
+
+
+app = FastAPI(title="AI Note Server", lifespan=lifespan)
 
 app.include_router(fs.router, prefix="/api/fs")
 app.include_router(documents.router, prefix="/api/documents")
+app.include_router(kb_api.router, prefix="/api/kb")
 
 app.add_middleware(
     CORSMiddleware,
