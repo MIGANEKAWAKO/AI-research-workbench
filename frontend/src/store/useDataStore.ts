@@ -82,6 +82,13 @@ interface DataState {
     saveNote: (note: Partial<Note> & Pick<Note, 'title' | 'content'>) => number
     deleteNote: (id: number) => void
 
+    // 重命名笔记：只改 frontmatter title 与内存（文件名是存储标识，不动——F1 决策）
+    renameNote: (id: number, newTitle: string) => void
+
+    // 从磁盘全量同步（30s 轮询兜底，感知 Obsidian/VS Code 的外部修改）
+    // skipNoteId：正在编辑的笔记保留内存值，防止未保存输入被磁盘旧版覆盖
+    refreshFromDisk: (skipNoteId?: number) => Promise<void>
+
     addCollection: (name: string) => void
     deleteCollection: (id: number) => void
 
@@ -206,6 +213,87 @@ export const useDataStore = create<DataState>((set, get) => ({
         set((state) => ({
             notes: state.notes.filter((n) => n.id !== id),
         }))
+    },
+
+    renameNote: (id, newTitle) => {
+        const path = idToPath.get(id)
+        const note = get().notes.find((n) => n.id === id)
+        if (!note || !path) return
+
+        const collectionName =
+            note.collectionId !== undefined
+                ? get().collections.find((c) => c.id === note.collectionId)?.name
+                : undefined
+        const renamed: Note = { ...note, title: newTitle, updatedAt: Date.now() }
+
+        // 内存立即生效；文件只更新 frontmatter title（文件名是存储标识，不动）
+        set((state) => ({
+            notes: state.notes.map((n) => (n.id === id ? renamed : n)),
+        }))
+        adapter
+            .write(path, serializeNote(renamed, collectionName))
+            .then(() => set({ backendOnline: true }))
+            .catch((e) => {
+                console.error('笔记重命名失败:', path, e)
+                if (isNetworkError(e)) set({ backendOnline: false })
+            })
+    },
+
+    refreshFromDisk: async (skipNoteId) => {
+        // 1. 扫描目录；失败（离线/目录不存在）→ 保持现状，静默返回
+        let entries: FsEntry[] = []
+        try {
+            entries = await adapter.list(NOTES_DIR)
+        } catch {
+            return
+        }
+
+        const current = get()
+        const nameToId = (name?: string) =>
+            current.collections.find((c) => c.name === name)?.id
+
+        // 2. 逐文件读 + 解析，与内存合并（以磁盘为准，skipNoteId 保留内存值）
+        const nextNotes: Note[] = []
+        const nextIdToPath = new Map<number, string>()
+
+        for (const entry of entries) {
+            if (entry.isDir || !entry.name.endsWith('.md')) continue
+            try {
+                const raw = await adapter.read(entry.path)
+                const parsed = parseNoteFile(raw, entry.name)
+                const existing = current.notes.find(
+                    (n) => n.id !== undefined && idToPath.get(n.id) === entry.path
+                )
+
+                if (existing && existing.id === skipNoteId) {
+                    // 正在编辑：保留内存值，防止未保存输入被磁盘旧版覆盖
+                    // （内存笔记必有 id，见 loadAll/saveNote 分配逻辑）
+                    nextNotes.push(existing)
+                    nextIdToPath.set(existing.id!, entry.path)
+                    continue
+                }
+
+                const id = existing?.id ?? nextNoteId++
+                nextIdToPath.set(id, entry.path)
+                nextNotes.push({
+                    id,
+                    title: parsed.title,
+                    content: parsed.content,
+                    tags: parsed.tags,
+                    cites: parsed.cites,
+                    collectionId: nameToId(parsed.collectionName),
+                    createdAt: existing?.createdAt ?? Date.now(),
+                    updatedAt: Date.now(),
+                })
+            } catch (e) {
+                console.warn(`轮询读取失败，跳过: ${entry.path}`, e)
+            }
+        }
+
+        // 3. 同步映射（模块级 idToPath 重建）与状态
+        idToPath.clear()
+        for (const [k, v] of nextIdToPath) idToPath.set(k, v)
+        set({ notes: nextNotes, backendOnline: true })
     },
 
     addCollection: (name) => {

@@ -75,18 +75,12 @@ const Editor = () => {
                 const existingNote = await getNote(targetId)
                 if (!existingNote) return
 
+                // F3：title 权威化——自动保存不再用正文第一行覆盖标题（标题由
+                // 新建/重命名决定，见 useDataStore.renameNote），只保存正文
                 const content = editorInstance.storage.markdown.getMarkdown()
-                const firstLine =
-                    editorInstance
-                        .getText()
-                        .split('\n')
-                        .find((line) => line.trim().length > 0)
-                        ?.trim() || ''
-                const title = firstLine.slice(0, 30) || 'Untitled'
 
                 await saveNote({
                     ...existingNote,
-                    title,
                     content,
                     updatedAt: Date.now(),
                 })

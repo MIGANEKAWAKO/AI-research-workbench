@@ -13,11 +13,22 @@ import { useEffect } from 'react';
 
 const Home = () => {
     const isAiPanelOpen = useNoteStore((state) => state.isAiPanelOpen);
+    const activeNoteId = useNoteStore((state) => state.activeNoteId);
 
     // F1：应用启动时从 vault 加载笔记（扫描 vault/笔记/*.md）
     useEffect(() => {
         useDataStore.getState().loadAll()
     }, [])
+
+    // F3：30s 轻量轮询兜底——感知 Obsidian/VS Code 等外部对 vault 文件的修改。
+    // 传入 activeNoteId：正在编辑的笔记保留内存值（refreshFromDisk 内部跳过），
+    // 防止未保存输入被磁盘旧版覆盖。activeNoteId 变化时重建定时器（无副作用）。
+    useEffect(() => {
+        const timer = setInterval(() => {
+            useDataStore.getState().refreshFromDisk(activeNoteId)
+        }, 30_000)
+        return () => clearInterval(timer)
+    }, [activeNoteId])
 
     return (
         <>
