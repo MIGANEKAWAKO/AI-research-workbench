@@ -24,6 +24,8 @@ import { Toolbar } from '@/components/tiptap-ui-primitive/toolbar'
 // node
 import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension'
 import { HorizontalRule } from '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension'
+import { Cite } from '@/components/tiptap-node/cite-node/cite-node-extension'
+import { CitationList } from '@/components/CitationList'
 import '@/components/tiptap-node/blockquote-node/blockquote-node.scss'
 import '@/components/tiptap-node/code-block-node/code-block-node.scss'
 import '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss'
@@ -125,6 +127,7 @@ const Editor = () => {
                 upload: handleImageUpload,
                 onError: (error) => console.error('Upload failed:', error),
             }),
+            Cite,
             Markdown,
         ],
         onUpdate: ({ editor }) => {
@@ -231,6 +234,8 @@ const Editor = () => {
                             role='presentation'
                             className='simple-editor-content'
                         />
+                        {/* F6：笔记尾参考文献列表（扫描 cite 节点实时渲染） */}
+                        <CitationList editor={editor} />
                     </div>
 
                     {/* AI 唤醒按钮 */}

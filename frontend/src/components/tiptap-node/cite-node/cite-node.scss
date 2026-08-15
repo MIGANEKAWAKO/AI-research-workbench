@@ -1,0 +1,24 @@
+// Cite 引用徽章样式（F6）：内联圆角徽章，与正文行内对齐。
+
+.cite-node {
+    display: inline;
+}
+
+.cite-badge {
+    display: inline-block;
+    margin: 0 2px;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    background-color: rgba(168, 85, 247, 0.12); // purple-500 淡底
+    color: rgb(126, 34, 206); // purple-700
+    font-size: 0.8em;
+    line-height: 1.4;
+    cursor: pointer;
+    vertical-align: baseline;
+    white-space: nowrap;
+    transition: background-color 0.15s ease;
+
+    &:hover {
+        background-color: rgba(168, 85, 247, 0.24);
+    }
+}
