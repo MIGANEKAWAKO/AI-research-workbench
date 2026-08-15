@@ -199,24 +199,27 @@ const SideBar = () => {
                                                 <FileText className="h-4 w-4" />
                                                 <span className="truncate">{note.title || "无标题"}</span>
                                             </SidebarMenuButton>
-                                            {/* 重命名按钮 */}
-                                            <SidebarMenuAction
-                                                showOnHover
-                                                onClick={(e) => handleRename(e, note.id!, note.title)}
-                                                className="hover:text-foreground transition-colors"
-                                            >
-                                                <Pencil className="h-4 w-4" />
-                                                <span className="sr-only">重命名</span>
-                                            </SidebarMenuAction>
-                                            {/* 删除按钮：使用 SidebarMenuAction */}
-                                            <SidebarMenuAction
-                                                showOnHover // 只有悬停时才显示
-                                                onClick={(e) => handleDelete(e, note.id!)}
-                                                className="hover:text-destructive transition-colors"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                                <span className="sr-only">删除</span>
-                                            </SidebarMenuAction>
+                                            {/* 操作按钮组：重命名 + 删除
+                                                注意：SidebarMenuAction 默认是 absolute 定位（右上角），
+                                                多个按钮必须包在 absolute 容器里并置 static，否则重叠 */}
+                                            <div className="absolute top-1.5 right-1 flex items-center">
+                                                <SidebarMenuAction
+                                                    showOnHover
+                                                    onClick={(e) => handleRename(e, note.id!, note.title)}
+                                                    className="static hover:text-foreground transition-colors"
+                                                >
+                                                    <Pencil className="h-4 w-4" />
+                                                    <span className="sr-only">重命名</span>
+                                                </SidebarMenuAction>
+                                                <SidebarMenuAction
+                                                    showOnHover // 只有悬停时才显示
+                                                    onClick={(e) => handleDelete(e, note.id!)}
+                                                    className="static hover:text-destructive transition-colors"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                    <span className="sr-only">删除</span>
+                                                </SidebarMenuAction>
+                                            </div>
                                         </SidebarMenuItem>
                                     </DraggableNote>
                                 ))}
@@ -290,24 +293,25 @@ const SideBar = () => {
                                                                 <FileText className="h-4 w-4" />
                                                                 <span className="truncate">{note.title || "无标题"}</span>
                                                             </SidebarMenuButton>
-                                                            {/* 重命名按钮 */}
-                                                            <SidebarMenuAction
-                                                                showOnHover
-                                                                onClick={(e) => handleRename(e, note.id!, note.title)}
-                                                                className="hover:text-foreground transition-colors"
-                                                            >
-                                                                <Pencil className="h-4 w-4" />
-                                                                <span className="sr-only">重命名</span>
-                                                            </SidebarMenuAction>
-                                                            {/* 删除按钮：使用 SidebarMenuAction */}
-                                                            <SidebarMenuAction
-                                                                showOnHover // 只有悬停时才显示
-                                                                onClick={(e) => handleDelete(e, note.id!)}
-                                                                className="hover:text-destructive transition-colors"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                                <span className="sr-only">删除</span>
-                                                            </SidebarMenuAction>
+                                                            {/* 操作按钮组：重命名 + 删除（absolute 容器防重叠，同上） */}
+                                                            <div className="absolute top-1.5 right-1 flex items-center">
+                                                                <SidebarMenuAction
+                                                                    showOnHover
+                                                                    onClick={(e) => handleRename(e, note.id!, note.title)}
+                                                                    className="static hover:text-foreground transition-colors"
+                                                                >
+                                                                    <Pencil className="h-4 w-4" />
+                                                                    <span className="sr-only">重命名</span>
+                                                                </SidebarMenuAction>
+                                                                <SidebarMenuAction
+                                                                    showOnHover // 只有悬停时才显示
+                                                                    onClick={(e) => handleDelete(e, note.id!)}
+                                                                    className="static hover:text-destructive transition-colors"
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                    <span className="sr-only">删除</span>
+                                                                </SidebarMenuAction>
+                                                            </div>
                                                         </SidebarMenuItem>
                                                     </DraggableNote>
                                                 ))}
