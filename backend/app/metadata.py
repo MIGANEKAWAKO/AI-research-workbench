@@ -25,6 +25,36 @@ DOI_PATTERN = re.compile(r"^10\.\d{4,9}/[^\s]+$")
 ARXIV_PATTERN = re.compile(r"^\d{4}\.\d{4,5}$")  # 新版：2401.00001
 ARXIV_OLD_PATTERN = re.compile(r"^[a-z-]+/\d{7}$")  # 老版：hep-th/0501001
 
+# 从 PDF 文本中提取 DOI（B5 增强）：DOI 合法字符为字母数字与 -._;()/:，
+# 排除空白/中文/引号防贪婪；尾部标点（句号/逗号/括号等）单独清洗
+DOI_IN_TEXT_PATTERN = re.compile(r"10\.\d{4,9}/[A-Za-z0-9._;()/:+-]+")
+DOI_TRAILING_TRIM = ".,;:)]}>'\""
+
+
+def extract_doi(text: str) -> str | None:
+    """从文本中提取 DOI（支持 doi.org/xxx、doi: xxx、裸 DOI 三种形态），无则 None。
+
+    - 优先匹配精确形态（doi.org/ 与 doi: 前缀），避免正文误匹配
+    - 裸 DOI 要求前面不是字母/数字/点（负向后顾），防止匹配到超链接的一部分
+    - 尾部清洗标点：PDF 文本中 DOI 后常跟句号/逗号/括号（如 "...130053."）
+    """
+    if not text:
+        return None
+
+    m = re.search(r"doi\.org\s*[/:：]\s*(10\.\d{4,9}/[A-Za-z0-9._;()/:+-]+)", text, re.IGNORECASE)
+    if m:
+        return m.group(1).rstrip(DOI_TRAILING_TRIM)
+
+    m = re.search(r"doi\s*[:：]\s*(10\.\d{4,9}/[A-Za-z0-9._;()/:+-]+)", text, re.IGNORECASE)
+    if m:
+        return m.group(1).rstrip(DOI_TRAILING_TRIM)
+
+    m = re.search(r"(?<![\w.])10\.\d{4,9}/[A-Za-z0-9._;()/:+-]+", text)
+    if m:
+        return m.group(0).rstrip(DOI_TRAILING_TRIM)
+
+    return None
+
 
 def detect_id_type(identifier: str) -> Literal["doi", "arxiv", "none"]:
     """识别标识符类型：DOI / arXiv（新老版）/ 都不像。"""

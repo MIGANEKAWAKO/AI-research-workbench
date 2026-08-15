@@ -84,7 +84,19 @@ async def import_document(
         await file.close()
 
     # 3. 元数据补全（失败兜底：title 用原名占位，照常入库）
+    #    显式 identifier（DOI/arXiv）优先；未提供时自动从 PDF 首页文本提取 DOI
     identifier = doi.strip() or arxivId.strip()
+    pages = None  # 抽取结果缓存：补全与索引共用，避免大 PDF 抽两次
+    if not identifier:
+        try:
+            pages = await anyio.to_thread.run_sync(kb.extract_pdf_pages, pdf_abs)
+            auto_doi = metadata.extract_doi("\n".join(pages[:2]))
+            if auto_doi:
+                identifier = auto_doi
+                print(f"自动提取 DOI: {auto_doi}")
+        except Exception as exc:
+            print("DOI 自动提取失败（已降级，title 将用文件名占位）:", repr(exc))
+
     meta: dict = await metadata.fetch_metadata(identifier) if identifier else {}
 
     entry = LiteratureEntry(
@@ -109,9 +121,10 @@ async def import_document(
         pdf_abs.unlink(missing_ok=True)
         raise HTTPException(status_code=409, detail=f"文献已存在（{duplicate.title}）")
 
-    # 5. 建索引（embedding 失败降级，不阻断导入）
+    # 5. 建索引（embedding 失败降级，不阻断导入）；复用补全阶段已抽取的 pages
     try:
-        pages = await anyio.to_thread.run_sync(kb.extract_pdf_pages, pdf_abs)
+        if pages is None:
+            pages = await anyio.to_thread.run_sync(kb.extract_pdf_pages, pdf_abs)
         await anyio.to_thread.run_sync(
             kb.upsert_document, "paper", lit_id, entry.title, pages
         )

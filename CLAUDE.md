@@ -64,6 +64,7 @@ AI research workbench/
 | ✅ 完成  | **F2 bugfix：gray-matter 浏览器 Buffer 崩溃**——弃用 gray-matter（其 utils.js 直接用全局 `Buffer.from`，浏览器必崩），自研 `src/lib/frontmatter.ts`（js-yaml@4，~50 行），格式兼容旧文件；bundle -275KB，浏览器侧 dump/load 验证通过 |
 | ✅ 完成  | **F3 侧边栏/列表文件模式改造**：笔记重命名（`renameNote`，只改 frontmatter title，文件名不动）+ 30s 轮询兜底（`refreshFromDisk(skipNoteId)`，跳过正在编辑的笔记防覆盖）+ title 权威化（自动保存不再用第一行覆盖标题），e2e 8/8 验证通过 |
 | ✅ 完成  | **F4 文献库 UI**：侧边栏 📝笔记\|📚文献 Tab 切换（无路由 state 方案）+ `useLiteratureStore` + `services/literature.ts`（B5 API 封装）+ 文献列表（搜索/状态过滤）+ 导入 Sheet（拖拽 + DOI/arXiv 补全交互 + 结果展示）+ 文献详情（元数据/反向引用/删除），e2e 12/12 验证通过；**注：元数据编辑依赖后端 PUT 接口（后续任务），详情当前只读** |
+| ✅ 完成  | **B5.1 导入自动提取 DOI**：`metadata.extract_doi`（纯函数，三种形态 + 尾部标点清洗）+ documents.py 导入流程改造（identifier 为空时扫前 2 页提取，pages 复用给索引，显式优先级不变），纯函数 9/9 + 集成 8/8（真实 PGFD-YOLO PDF 自动补全）验证通过 |
 | ⚠️ 当前 | 笔记以 Markdown + frontmatter 落盘，30s 轮询感知外部修改；文献库可导入/列表/删除（阅读器 F5 未接）；**tiptap-markdown@0.9 无 extendMarkdown**（引用徽章序列化推迟 F6 前置调研） |
 | ⬜ 下一步 | WBS F5（PDF 阅读器，最大单项）：pdfjs-dist + canvas 渲染 + text layer + 翻页/缩放/页码 + 划词浮层（转笔记引用 / 问 AI / 复制） |
 
