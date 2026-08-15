@@ -23,6 +23,7 @@ import { DraggableNote } from '@/components/SiderBar/draggable-note'
 import { DroppableCollection } from '@/components/SiderBar/droppable-collection'
 import { useNoteStore } from '@/store/useNoteStore';
 import { useDataStore } from '@/store/useDataStore';
+import { LiteratureList } from '@/components/Literature/literature-list';
 
 const SideBar = () => {
     // 订阅内存数据源（Zustand 响应式，行为与原 useLiveQuery 等价）
@@ -33,6 +34,8 @@ const SideBar = () => {
 
     const activeNoteId = useNoteStore((state) => state.activeNoteId);
     const setActiveNote = useNoteStore((state) => state.setActiveNote);
+    const view = useNoteStore((state) => state.view);
+    const setView = useNoteStore((state) => state.setView);
     const normalizedSearchKeyword = searchKeyword.trim().toLowerCase();
     const filteredNotes = useMemo(() => {
         if (!normalizedSearchKeyword) return notes;
@@ -150,7 +153,33 @@ const SideBar = () => {
                             笔记不会被保存，请先启动后端
                         </div>
                     )}
-                    <div className="relative">
+
+                    {/* F4：视图模式切换 Tab（笔记 / 文献库） */}
+                    <div className="mb-2 grid grid-cols-2 gap-1 rounded-md bg-sidebar-accent/60 p-1 text-xs">
+                        <button
+                            onClick={() => setView('notes')}
+                            className={`rounded px-2 py-1 transition-colors ${
+                                view === 'notes'
+                                    ? 'bg-white font-medium shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            📝 笔记
+                        </button>
+                        <button
+                            onClick={() => setView('library')}
+                            className={`rounded px-2 py-1 transition-colors ${
+                                view === 'library'
+                                    ? 'bg-white font-medium shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            📚 文献
+                        </button>
+                    </div>
+                    {view === 'notes' ? (
+                        <>
+                        <div className="relative">
                         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
                             value={searchKeyword}
@@ -178,9 +207,15 @@ const SideBar = () => {
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                     </SidebarMenu>
+                        </>
+                    ) : null}
                 </SidebarHeader>
 
                 <SidebarContent>
+                    {view === 'library' ? (
+                        <LiteratureList />
+                    ) : (
+                    <>
                     <SidebarGroup>
                         <SidebarGroupLabel>未分类</SidebarGroupLabel>
                         <SidebarGroupContent>
@@ -322,6 +357,8 @@ const SideBar = () => {
                             </DroppableCollection>
                         </Collapsible>
                     ))}
+                    </>
+                    )}
                 </SidebarContent>
             </Sidebar>
         </DndContext>
