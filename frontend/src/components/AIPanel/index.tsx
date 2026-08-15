@@ -21,6 +21,7 @@ const TYPEWRITER_INTERVAL_MS = 24
 
 const AIPanel = () => {
     const { activeNoteId, isAiPanelOpen } = useNoteStore()
+    const aiPrefill = useNoteStore((state) => state.aiPrefill)
     const [input, setInput] = useState('')
     const [selectedTaskType, setSelectedTaskType] = useState<AiTaskType>('summarize')
     const [messages, setMessages] = useState<Message[]>([])
@@ -88,6 +89,14 @@ const AIPanel = () => {
             stopTypewriter()
         }
     }, [stopTypewriter])
+
+    // F5：划词「问 AI」→ 打开面板并把选中文本预填进输入框（消费后清空，避免重复填入）
+    useEffect(() => {
+        if (aiPrefill !== null) {
+            setInput(aiPrefill)
+            useNoteStore.getState().clearAiPrefill()
+        }
+    }, [aiPrefill])
 
     if (!isAiPanelOpen) return null
 

@@ -1,0 +1,245 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut } from 'lucide-react'
+import { loadPdfDocument } from '@/services/pdf'
+import { useLiteratureStore } from '@/store/useLiteratureStore'
+import { useNoteStore } from '@/store/useNoteStore'
+import { PdfPage, type TextSelection } from './pdf-page'
+import { SelectionToolbar } from './selection-toolbar'
+import { CitePicker } from './cite-picker'
+
+const MIN_SCALE = 0.5
+const MAX_SCALE = 3
+const SCALE_STEP = 0.25
+
+/**
+ * PDF 阅读器（F5）主组件：加载 + 工具栏（翻页/缩放/页码）+ 划词浮层编排。
+ * 渲染在中间面板（文献模式 + readerId 非空时替代文献详情）。
+ */
+export function PdfReader() {
+    const entries = useLiteratureStore((s) => s.entries)
+    const readerId = useLiteratureStore((s) => s.readerId)
+    const closeReader = useLiteratureStore((s) => s.closeReader)
+    const prefillAi = useNoteStore((s) => s.prefillAi)
+
+    const entry = useMemo(
+        () => entries.find((e) => e.id === readerId) ?? null,
+        [entries, readerId]
+    )
+
+    const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [pageNumber, setPageNumber] = useState(1)
+    const [totalPages, setTotalPages] = useState(0)
+    const [scale, setScale] = useState(1)
+    const [selection, setSelection] = useState<TextSelection | null>(null)
+    const [citeOpen, setCiteOpen] = useState(false)
+
+    // 加载 PDF：entry.id 变化（切换文献/关闭）时重载；cleanup 释放旧文档
+    useEffect(() => {
+        if (!entry) return
+        let cancelled = false
+        let doc: PDFDocumentProxy | null = null
+
+        setLoading(true)
+        setError(null)
+        setPageNumber(1)
+        setTotalPages(0)
+        setSelection(null)
+        setCiteOpen(false)
+
+        loadPdfDocument(entry.pdfPath)
+            .then((d) => {
+                if (cancelled) {
+                    void d.cleanup()
+                    return
+                }
+                doc = d
+                setPdf(d)
+                setTotalPages(d.numPages)
+                setPageNumber(1)
+            })
+            .catch((e) => {
+                if (!cancelled) setError(e instanceof Error ? e.message : 'PDF 加载失败')
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false)
+            })
+
+        return () => {
+            cancelled = true
+            if (doc) void doc.cleanup()
+            setPdf(null)
+        }
+    }, [entry?.id])
+
+    const clearSelection = useCallback(() => setSelection(null), [])
+
+    // 翻页/缩放统一走这里：夹边界 + 清空划词浮层
+    const goTo = useCallback(
+        (n: number) => {
+            setPageNumber(Math.max(1, Math.min(totalPages || 1, n)))
+            clearSelection()
+        },
+        [totalPages, clearSelection]
+    )
+
+    const zoom = useCallback(
+        (next: number) => {
+            setScale(Math.max(MIN_SCALE, Math.min(MAX_SCALE, next)))
+        },
+        []
+    )
+
+    // 划词动作
+    const handleCopy = useCallback(async () => {
+        if (!selection) return
+        try {
+            await navigator.clipboard.writeText(selection.text)
+        } catch (e) {
+            console.error('复制失败:', e)
+        }
+        clearSelection()
+    }, [selection, clearSelection])
+
+    const handleAskAi = useCallback(() => {
+        if (!selection) return
+        prefillAi(selection.text)
+        clearSelection()
+    }, [selection, prefillAi, clearSelection])
+
+    const handleCite = useCallback(() => {
+        setCiteOpen(true)
+    }, [])
+
+    const handleCiteClose = useCallback(() => {
+        setCiteOpen(false)
+        clearSelection()
+    }, [clearSelection])
+
+    if (!entry) {
+        return (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                未选择文献
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex h-full flex-col overflow-hidden bg-gray-100">
+            {/* 工具栏 */}
+            <div className="flex shrink-0 items-center gap-3 border-b bg-white px-4 py-2">
+                <button
+                    onClick={closeReader}
+                    className="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-gray-100"
+                    title="返回文献详情"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    返回
+                </button>
+
+                <div className="min-w-0 flex-1 truncate text-sm font-medium" title={entry.title}>
+                    {entry.title || '未命名文献'}
+                </div>
+
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => goTo(pageNumber - 1)}
+                        disabled={pageNumber <= 1}
+                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-gray-100 disabled:opacity-40"
+                        title="上一页"
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <input
+                        type="number"
+                        value={pageNumber}
+                        min={1}
+                        max={totalPages || 1}
+                        onChange={(e) => {
+                            const v = Number(e.target.value)
+                            if (Number.isFinite(v)) goTo(v)
+                        }}
+                        className="h-8 w-14 rounded-md border border-input bg-background px-1 text-center text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                    <span className="text-sm text-muted-foreground">/ {totalPages}</span>
+                    <button
+                        onClick={() => goTo(pageNumber + 1)}
+                        disabled={pageNumber >= totalPages}
+                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-gray-100 disabled:opacity-40"
+                        title="下一页"
+                    >
+                        <ChevronRight className="h-4 w-4" />
+                    </button>
+                </div>
+
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => zoom(scale - SCALE_STEP)}
+                        disabled={scale <= MIN_SCALE}
+                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-gray-100 disabled:opacity-40"
+                        title="缩小"
+                    >
+                        <ZoomOut className="h-4 w-4" />
+                    </button>
+                    <span className="w-12 text-center text-xs text-muted-foreground">
+                        {Math.round(scale * 100)}%
+                    </span>
+                    <button
+                        onClick={() => zoom(scale + SCALE_STEP)}
+                        disabled={scale >= MAX_SCALE}
+                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-gray-100 disabled:opacity-40"
+                        title="放大"
+                    >
+                        <ZoomIn className="h-4 w-4" />
+                    </button>
+                </div>
+            </div>
+
+            {/* 页面区 */}
+            <div className="relative flex-1 overflow-auto">
+                <div className="flex min-h-full flex-col items-center gap-4 py-6">
+                    {loading && (
+                        <div className="flex items-center gap-2 py-16 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            加载 PDF 中…
+                        </div>
+                    )}
+
+                    {!loading && error && (
+                        <div className="py-16 text-sm text-red-600">{error}</div>
+                    )}
+
+                    {!loading && !error && pdf && (
+                        <PdfPage
+                            pdf={pdf}
+                            pageNumber={pageNumber}
+                            scale={scale}
+                            onTextSelect={setSelection}
+                        />
+                    )}
+                </div>
+            </div>
+
+            {/* 划词浮层 */}
+            {selection && !citeOpen && (
+                <SelectionToolbar
+                    selection={selection}
+                    onCopy={handleCopy}
+                    onCite={handleCite}
+                    onAskAi={handleAskAi}
+                />
+            )}
+
+            {/* 转笔记引用选择器 */}
+            <CitePicker
+                open={citeOpen}
+                literature={{ id: entry.id, title: entry.title }}
+                pageNumber={selection?.pageNumber ?? pageNumber}
+                text={selection?.text ?? ''}
+                onClose={handleCiteClose}
+            />
+        </div>
+    )
+}

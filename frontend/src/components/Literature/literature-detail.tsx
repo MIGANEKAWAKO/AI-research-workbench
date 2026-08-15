@@ -11,6 +11,7 @@ export const LiteratureDetail = () => {
     const entries = useLiteratureStore((s) => s.entries)
     const activeId = useLiteratureStore((s) => s.activeId)
     const remove = useLiteratureStore((s) => s.remove)
+    const openReader = useLiteratureStore((s) => s.openReader)
     const notes = useDataStore((s) => s.notes)
 
     const entry = entries.find((e) => e.id === activeId) ?? null
@@ -67,6 +68,17 @@ export const LiteratureDetail = () => {
                         {entry.status}
                     </span>
                 </div>
+            </div>
+
+            {/* F5：阅读入口 */}
+            <div className="px-6 py-3">
+                <button
+                    onClick={() => openReader(entry.id)}
+                    className="flex items-center gap-1.5 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
+                >
+                    <BookOpen className="h-4 w-4" />
+                    阅读 PDF
+                </button>
             </div>
 
             {/* 元数据 */}

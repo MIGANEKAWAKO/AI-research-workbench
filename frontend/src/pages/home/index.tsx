@@ -11,12 +11,14 @@ import { useNoteStore } from "@/store/useNoteStore";
 import { useDataStore } from "@/store/useDataStore";
 import { useLiteratureStore } from "@/store/useLiteratureStore";
 import { LiteratureDetail } from "@/components/Literature/literature-detail";
+import { PdfReader } from "@/components/Reader/pdf-reader";
 import { useEffect } from 'react';
 
 const Home = () => {
     const isAiPanelOpen = useNoteStore((state) => state.isAiPanelOpen);
     const activeNoteId = useNoteStore((state) => state.activeNoteId);
     const view = useNoteStore((state) => state.view);
+    const readerId = useLiteratureStore((state) => state.readerId);
 
     // F1：应用启动时从 vault 加载笔记（扫描 vault/笔记/*.md）
     useEffect(() => {
@@ -50,10 +52,14 @@ const Home = () => {
                     </aside>
 
                     <ResizablePanelGroup className="flex-1">
-                        {/* 中间面板：笔记模式 → 编辑器；文献模式 → 文献详情（F4） */}
+                        {/* 中间面板：笔记模式 → 编辑器；文献模式 → 阅读器（F5）或详情（F4） */}
                         <ResizablePanel defaultSize={70} minSize={30}>
                             <main className="flex-1 flex flex-col min-w-0 bg-white relative">
-                                {view === 'library' ? <LiteratureDetail /> : <Editor />}
+                                {view === 'library' ? (
+                                    readerId ? <PdfReader /> : <LiteratureDetail />
+                                ) : (
+                                    <Editor />
+                                )}
                             </main>
                         </ResizablePanel>
 

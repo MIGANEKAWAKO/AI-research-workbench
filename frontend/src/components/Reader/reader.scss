@@ -1,0 +1,27 @@
+// PDF 阅读器 text layer 样式（F5）。
+// 核心：文字层 span 颜色透明（canvas 位图负责显示），但保留可选中性；
+// 选中时用 ::selection 半透明背景给出视觉反馈。样式对齐 pdf.js 官方 text_layer 的精简子集。
+
+.pdf-text-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+    line-height: 1;
+    text-align: initial;
+    cursor: text;
+    transform-origin: 0 0;
+
+    span {
+        color: transparent;
+        position: absolute;
+        white-space: pre;
+        transform-origin: 0 0;
+        cursor: text;
+    }
+
+    // 透明文字选中时默认高亮不可见，需显式给半透明背景
+    ::selection {
+        background: rgba(99, 102, 241, 0.35);
+    }
+}

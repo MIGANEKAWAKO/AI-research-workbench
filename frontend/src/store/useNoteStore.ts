@@ -12,6 +12,8 @@ interface NoteState {
     view: ViewMode
     isAiPanelOpen: boolean
     isSaving: boolean
+    // F5：划词「问 AI」的预填文本（AIPanel 消费后清空，见 prefillAi）
+    aiPrefill: string | null
 
     // 方法
     setActiveNote: (id: number | undefined) => void
@@ -19,6 +21,8 @@ interface NoteState {
     setView: (view: ViewMode) => void
     toggleAiPanel: () => void
     setSaving: (status: boolean) => void
+    prefillAi: (text: string) => void
+    clearAiPrefill: () => void
 }
 
 export const useNoteStore = create<NoteState>((set) => ({
@@ -27,10 +31,13 @@ export const useNoteStore = create<NoteState>((set) => ({
     view: 'notes',
     isAiPanelOpen: false,
     isSaving: false,
+    aiPrefill: null,
 
     setActiveNote: (id) => set({ activeNoteId: id }),
     setActiveCollection: (id) => set({ activeCollectionId: id }),
     setView: (view) => set({ view }),
     toggleAiPanel: () => set((state) => ({ isAiPanelOpen: !state.isAiPanelOpen })),
-    setSaving: (status) => set({ isSaving: status })
+    setSaving: (status) => set({ isSaving: status }),
+    prefillAi: (text) => set({ aiPrefill: text, isAiPanelOpen: true }),
+    clearAiPrefill: () => set({ aiPrefill: null }),
 }))
