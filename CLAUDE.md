@@ -60,7 +60,8 @@ AI research workbench/
 | ----- | --------------------------------------------------------------------------------------------------------------------- |
 | ✅ 完成  | 依赖清理：移除 dexie / dexie-react-hooks / react-router-dom，删除 db.ts，类型迁入 src/types/，Dexie 调用全部替换为 `useDataStore` 内存数据源，构建通过 |
 | ✅ 完成  | **F1 StorageAdapter 抽象**：接口 6 方法（用户写）+ `HttpFsAdapter`（fetch 后端 `/api/fs/*`）+ 工厂 + `useDataStore` 文件持久化（loadAll/saveNote/deleteNote），UI 层零改动，端到端验证 8/8 |
-| ✅ 完成  | **F2 笔记 Markdown 化**：`src/lib/note-file.ts`（gray-matter frontmatter 读写纯函数）+ editor 保存改 `getMarkdown()` + 集合持久化 `.kb/collections.json` + tiptap-markdown 类型补充，纯函数 16/16 + 端到端 20/20 验证通过 |
+| ✅ 完成  | **F2 笔记 Markdown 化**：`src/lib/note-file.ts`（frontmatter 读写纯函数）+ editor 保存改 `getMarkdown()` + 集合持久化 `.kb/collections.json` + tiptap-markdown 类型补充，纯函数 16/16 + 端到端 20/20 验证通过 |
+| ✅ 完成  | **F2 bugfix：gray-matter 浏览器 Buffer 崩溃**——弃用 gray-matter（其 utils.js 直接用全局 `Buffer.from`，浏览器必崩），自研 `src/lib/frontmatter.ts`（js-yaml@4，~50 行），格式兼容旧文件；bundle -275KB，浏览器侧 dump/load 验证通过 |
 | ⚠️ 当前 | 笔记以 Markdown + frontmatter（title/collection/tags/cites）落盘，Obsidian 可直接打开；**注意：tiptap-markdown@0.9 无 extendMarkdown**（自定义节点序列化能力缺失，背景色降级，引用徽章序列化推迟 F6 前置调研） |
 | ⬜ 下一步 | WBS F3（侧边栏/列表文件模式改造：数据源文件扫描 + 30s 轮询兜底 + 搜索/拖拽/重命名适配）或 F4（文献库 UI，依赖 B5） |
 

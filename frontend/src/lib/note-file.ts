@@ -1,4 +1,4 @@
-import matter from 'gray-matter'
+import { stringifyFrontmatter, parseFrontmatter } from '@/lib/frontmatter'
 import type { Note } from '@/types'
 
 /**
@@ -47,7 +47,7 @@ export function serializeNote(note: Note, collectionName?: string): string {
     const content = note.content ?? ''
     // 没有元数据时直接写正文，避免生成空的 --- 包裹
     if (Object.keys(frontmatter).length === 0) return content
-    return matter.stringify(content, frontmatter)
+    return stringifyFrontmatter(content, frontmatter)
 }
 
 /**
@@ -56,7 +56,7 @@ export function serializeNote(note: Note, collectionName?: string): string {
  * - 缺字段：给默认值，不抛错
  */
 export function parseNoteFile(raw: string, fileName: string): ParsedNoteFile {
-    const { data, content } = matter(raw)
+    const { data, content } = parseFrontmatter(raw)
 
     const title = typeof data.title === 'string' && data.title.trim()
         ? data.title.trim()
