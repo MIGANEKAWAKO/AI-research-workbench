@@ -11,6 +11,7 @@ import { listLiterature, importLiterature, deleteLiterature } from '@/services/l
 interface LiteratureState {
     entries: LiteratureEntry[]
     activeId: string | null      // 当前选中的文献（详情面板）
+    readerId: string | null      // F5：正在阅读的文献（非空 → 中间面板显示阅读器而非详情）
     loading: boolean
     importing: boolean
     error: string | null         // 最近一次操作错误（UI 展示后由 clearError 清除）
@@ -19,12 +20,15 @@ interface LiteratureState {
     importFile: (file: File, doi?: string, arxivId?: string) => Promise<LiteratureEntry | null>
     remove: (id: string) => Promise<void>
     setActive: (id: string | null) => void
+    openReader: (id: string) => void
+    closeReader: () => void
     clearError: () => void
 }
 
 export const useLiteratureStore = create<LiteratureState>((set) => ({
     entries: [],
     activeId: null,
+    readerId: null,
     loading: false,
     importing: false,
     error: null,
@@ -72,5 +76,7 @@ export const useLiteratureStore = create<LiteratureState>((set) => ({
     },
 
     setActive: (id) => set({ activeId: id }),
+    openReader: (id) => set({ readerId: id, activeId: id }),
+    closeReader: () => set({ readerId: null }),
     clearError: () => set({ error: null }),
 }))
