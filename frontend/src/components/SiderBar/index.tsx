@@ -1,6 +1,6 @@
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { useMemo, useState } from 'react';
-import { FileText, Plus, Trash2, FolderPlus, Folder, ChevronRight, Search, X } from "lucide-react"
+import { FileText, Plus, Trash2, FolderPlus, Folder, ChevronRight, Search, X, Pencil } from "lucide-react"
 import {
     Sidebar,
     SidebarContent,
@@ -64,8 +64,22 @@ const SideBar = () => {
         setActiveNote(id)
     }
 
-    const handleDelete = async (e: React.MouseEvent, id: number) => {
-        // 1. 阻止事件冒泡，防止触发侧边栏的“选中笔记”事件
+    // F3：重命名笔记（只改 frontmatter title，文件名不动）
+    const handleRename = async (e: React.MouseEvent, id: number, oldTitle: string) => {
+        // 1. 阻止事件冒泡，防止触发侧边栏的"选中笔记"事件
+        e.preventDefault()
+        e.stopPropagation()
+
+        // 2. 输入新标题（默认带出旧标题）
+        const newTitle = prompt("请输入新标题", oldTitle)
+        if (!newTitle || !newTitle.trim() || newTitle.trim() === oldTitle) return
+
+        // 3. 更新数据源（内存 + frontmatter）
+        useDataStore.getState().renameNote(id, newTitle.trim())
+        console.log(`✏️ 笔记 ${id} 已重命名为 "${newTitle.trim()}"`)
+    }
+
+    const handleDelete = async (e: React.MouseEvent, id: number) => {        // 1. 阻止事件冒泡，防止触发侧边栏的“选中笔记”事件
         e.preventDefault()
         e.stopPropagation()
 
@@ -185,6 +199,15 @@ const SideBar = () => {
                                                 <FileText className="h-4 w-4" />
                                                 <span className="truncate">{note.title || "无标题"}</span>
                                             </SidebarMenuButton>
+                                            {/* 重命名按钮 */}
+                                            <SidebarMenuAction
+                                                showOnHover
+                                                onClick={(e) => handleRename(e, note.id!, note.title)}
+                                                className="hover:text-foreground transition-colors"
+                                            >
+                                                <Pencil className="h-4 w-4" />
+                                                <span className="sr-only">重命名</span>
+                                            </SidebarMenuAction>
                                             {/* 删除按钮：使用 SidebarMenuAction */}
                                             <SidebarMenuAction
                                                 showOnHover // 只有悬停时才显示
@@ -267,6 +290,15 @@ const SideBar = () => {
                                                                 <FileText className="h-4 w-4" />
                                                                 <span className="truncate">{note.title || "无标题"}</span>
                                                             </SidebarMenuButton>
+                                                            {/* 重命名按钮 */}
+                                                            <SidebarMenuAction
+                                                                showOnHover
+                                                                onClick={(e) => handleRename(e, note.id!, note.title)}
+                                                                className="hover:text-foreground transition-colors"
+                                                            >
+                                                                <Pencil className="h-4 w-4" />
+                                                                <span className="sr-only">重命名</span>
+                                                            </SidebarMenuAction>
                                                             {/* 删除按钮：使用 SidebarMenuAction */}
                                                             <SidebarMenuAction
                                                                 showOnHover // 只有悬停时才显示
