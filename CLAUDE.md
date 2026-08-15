@@ -63,8 +63,9 @@ AI research workbench/
 | ✅ 完成  | **F2 笔记 Markdown 化**：`src/lib/note-file.ts`（frontmatter 读写纯函数）+ editor 保存改 `getMarkdown()` + 集合持久化 `.kb/collections.json` + tiptap-markdown 类型补充，纯函数 16/16 + 端到端 20/20 验证通过 |
 | ✅ 完成  | **F2 bugfix：gray-matter 浏览器 Buffer 崩溃**——弃用 gray-matter（其 utils.js 直接用全局 `Buffer.from`，浏览器必崩），自研 `src/lib/frontmatter.ts`（js-yaml@4，~50 行），格式兼容旧文件；bundle -275KB，浏览器侧 dump/load 验证通过 |
 | ✅ 完成  | **F3 侧边栏/列表文件模式改造**：笔记重命名（`renameNote`，只改 frontmatter title，文件名不动）+ 30s 轮询兜底（`refreshFromDisk(skipNoteId)`，跳过正在编辑的笔记防覆盖）+ title 权威化（自动保存不再用第一行覆盖标题），e2e 8/8 验证通过 |
-| ⚠️ 当前 | 笔记以 Markdown + frontmatter（title/collection/tags/cites）落盘，Obsidian 可直接打开；外部修改 30s 轮询感知（内容级）；**注意：tiptap-markdown@0.9 无 extendMarkdown**（自定义节点序列化能力缺失，背景色降级，引用徽章序列化推迟 F6 前置调研） |
-| ⬜ 下一步 | WBS F4（文献库 UI，依赖 B5 已完成）：文献列表（搜索/状态/集合过滤）、导入（文件选择/拖拽上传）、元数据补全交互（DOI/arXiv）、文献详情、删除 |
+| ✅ 完成  | **F4 文献库 UI**：侧边栏 📝笔记\|📚文献 Tab 切换（无路由 state 方案）+ `useLiteratureStore` + `services/literature.ts`（B5 API 封装）+ 文献列表（搜索/状态过滤）+ 导入 Sheet（拖拽 + DOI/arXiv 补全交互 + 结果展示）+ 文献详情（元数据/反向引用/删除），e2e 12/12 验证通过；**注：元数据编辑依赖后端 PUT 接口（后续任务），详情当前只读** |
+| ⚠️ 当前 | 笔记以 Markdown + frontmatter 落盘，30s 轮询感知外部修改；文献库可导入/列表/删除（阅读器 F5 未接）；**tiptap-markdown@0.9 无 extendMarkdown**（引用徽章序列化推迟 F6 前置调研） |
+| ⬜ 下一步 | WBS F5（PDF 阅读器，最大单项）：pdfjs-dist + canvas 渲染 + text layer + 翻页/缩放/页码 + 划词浮层（转笔记引用 / 问 AI / 复制） |
 
 **前端当前存储架构**：`useDataStore`（Zustand）仍是唯一数据入口（内存缓存 = 响应式数据源）；`useNotes.ts` 保持对外 API 签名（saveNote/getNote），编辑器零改动。存储链路：UI → useDataStore → `StorageAdapter`（开发期 `HttpFsAdapter` → 后端 `/api/fs/*`）→ vault 文件（笔记 = Markdown + frontmatter，集合 = `.kb/collections.json`）。发布期换 Tauri 实现只需改工厂 `src/services/storage/index.ts` 一处。F3 起 UI 层将接触文件扫描/轮询，但 useNotes 对外 API 仍保持稳定。
 

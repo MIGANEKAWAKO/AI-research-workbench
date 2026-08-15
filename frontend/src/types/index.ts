@@ -16,3 +16,22 @@ export interface Collection {
     name: string
     createdAt: number
 }
+
+// 文献元数据（对齐后端 B5 LiteratureEntry，见 docs/后端接口文档.md）
+export interface LiteratureEntry {
+    id: string          // 12 位 hex，后端生成（uuid 前缀）
+    title: string
+    authors: { given: string; family: string }[]
+    year: number | null
+    venue: string
+    volume: string
+    issue: string
+    pages: string
+    doi: string
+    arxivId: string
+    pdfPath: string     // vault 内相对路径
+    status: string      // 未读 / 在读 / 已读
+    collectionIds: string[]
+    tags: string[]
+    importedAt: string
+}
