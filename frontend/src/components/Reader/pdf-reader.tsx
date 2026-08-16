@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, Bot, ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut } from 'lucide-react'
 import { loadPdfDocument } from '@/services/pdf'
 import { useLiteratureStore } from '@/store/useLiteratureStore'
-import { useNoteStore } from '@/store/useNoteStore'
+import { useNoteStore, type AiAskType } from '@/store/useNoteStore'
 import { PdfPage, type TextSelection } from './pdf-page'
 import { SelectionToolbar } from './selection-toolbar'
 import { CitePicker } from './cite-picker'
@@ -20,7 +20,9 @@ export function PdfReader() {
     const entries = useLiteratureStore((s) => s.entries)
     const readerId = useLiteratureStore((s) => s.readerId)
     const closeReader = useLiteratureStore((s) => s.closeReader)
-    const prefillAi = useNoteStore((s) => s.prefillAi)
+    const prefillAiTask = useNoteStore((s) => s.prefillAiTask)
+    const toggleAiPanel = useNoteStore((s) => s.toggleAiPanel)
+    const isAiPanelOpen = useNoteStore((s) => s.isAiPanelOpen)
 
     const entry = useMemo(
         () => entries.find((e) => e.id === readerId) ?? null,
@@ -103,11 +105,16 @@ export function PdfReader() {
         clearSelection()
     }, [selection, clearSelection])
 
-    const handleAskAi = useCallback(() => {
-        if (!selection) return
-        prefillAi(selection.text)
-        clearSelection()
-    }, [selection, prefillAi, clearSelection])
+    // F7：划词提问三子项（解释/翻译/总结）→ 打开面板并自动发送（对话模式 + 单篇限定）
+    // bugfix：带出处信息（文献标题 + 页码），AI 回答的来源标注与划词页码一致
+    const handleAskAi = useCallback(
+        (type: AiAskType) => {
+            if (!selection || !entry) return
+            prefillAiTask(type, selection.text, selection.pageNumber, entry.title)
+            clearSelection()
+        },
+        [selection, entry, prefillAiTask, clearSelection]
+    )
 
     const handleCite = useCallback(() => {
         setCiteOpen(true)
@@ -142,6 +149,20 @@ export function PdfReader() {
                 <div className="min-w-0 flex-1 truncate text-sm font-medium" title={entry.title}>
                     {entry.title || '未命名文献'}
                 </div>
+
+                {/* F7：单篇问答入口（docId = 当前文献，AI 面板上下文条显示单篇） */}
+                <button
+                    onClick={toggleAiPanel}
+                    className={`flex items-center gap-1 rounded-md px-2 py-1 text-sm transition-colors ${
+                        isAiPanelOpen
+                            ? 'bg-purple-600 text-white'
+                            : 'text-muted-foreground hover:bg-gray-100'
+                    }`}
+                    title="问 AI（问答自动限定当前文献）"
+                >
+                    <Bot className="h-4 w-4" />
+                    问 AI
+                </button>
 
                 <div className="flex items-center gap-1">
                     <button
