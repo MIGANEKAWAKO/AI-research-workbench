@@ -22,6 +22,8 @@ from .prompts import (
 )
 from .routers import documents, fs, kb_api
 
+from .rag import build_rag_context
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -57,7 +59,7 @@ def _sse_data(payload: Dict[str, Any]) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _build_messages(payload: Dict[str, Any]) -> Dict[str, Any]:
+async def _build_messages(payload: Dict[str, Any]) -> Dict[str, Any]:
     task_type = payload.get("taskType")
     text = payload.get("text")
     messages = payload.get("messages")
@@ -83,6 +85,9 @@ def _build_messages(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {"error": MISSING_MESSAGES_ERROR}
 
     formatted_messages: List[Dict[str, Any]] = []
+
+    note_context_text = note_context if isinstance(note_context, str) and note_context.strip() else "无"
+
     for item in messages:
         if isinstance(item, dict):
             role = normalize_role(item.get("role"))
@@ -92,13 +97,24 @@ def _build_messages(payload: Dict[str, Any]) -> Dict[str, Any]:
             content = None
         formatted_messages.append({"role": role, "content": content})
 
-    note_context_text = note_context if isinstance(note_context, str) and note_context.strip() else "无"
+    query = ''
+
+    for msg in reversed(formatted_messages):
+        if msg["role"] == "user" and isinstance(msg["content"], str):
+            query = msg["content"]
+            break
+    query = query[:500]
+
+    doc_id = payload.get("docId")
+    rag_text = await anyio.to_thread.run_sync(build_rag_context, query, doc_id)
+    
+    system_content = SYSTEM_PROMPT_TEMPLATE.format(note_context=note_context_text) + rag_text
 
     return {
         "messages": [
             {
                 "role": "system",
-                "content": SYSTEM_PROMPT_TEMPLATE.format(note_context=note_context_text),
+                "content": system_content,
             },
             *formatted_messages,
         ]
@@ -153,7 +169,7 @@ async def chat(request: Request):
     except Exception:
         payload = {}
 
-    completion_messages = _build_messages(payload)
+    completion_messages = await _build_messages(payload)
     headers = {
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",

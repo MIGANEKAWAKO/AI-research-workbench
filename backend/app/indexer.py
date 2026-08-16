@@ -185,9 +185,9 @@ def get_index_status() -> dict[str, Any]:
             rel = _rel_to_vault(p, vault)
             if rel not in state["note"]:
                 unindexed.append(rel)
-    for pdf_rel in load_literature():
-        if pdf_rel not in state["paper"]:
-            unindexed.append(pdf_rel)
+    for entry in load_literature():
+        if entry.pdfPath not in state["paper"]:
+            unindexed.append(entry.pdfPath)
 
     return {
         "chunks": sum(info.get("chunks", 0)
