@@ -11,20 +11,17 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from . import kb
+from .frontmatter import parse_frontmatter
 from .literature import load_literature
 from .vault import default_vault_path, kb_root
 
 NOTE_DIR = "笔记"
 INDEX_STATE_FILE = "index_state.json"
-FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
 
 
 def _state_path() -> Path:
@@ -65,17 +62,9 @@ def _file_signature(path: Path) -> tuple[int, int]:
 def _extract_note_text(path: Path) -> tuple[str, str]:
     """解析笔记 frontmatter：返回 (title, 正文)。frontmatter 不进向量。"""
     content = path.read_text(encoding="utf-8")
-    title = path.stem
-    match = FRONTMATTER_PATTERN.match(content)
-    if match:
-        try:
-            meta = yaml.safe_load(match.group(1)) or {}
-            if isinstance(meta, dict) and meta.get("title"):
-                title = str(meta["title"])
-        except yaml.YAMLError:
-            pass
-        content = content[match.end():]
-    return title, content.strip()
+    meta, body = parse_frontmatter(content)
+    title = str(meta["title"]) if meta.get("title") else path.stem
+    return title, body.strip()
 
 
 def _rel_to_vault(path: Path, vault: Path) -> str:
