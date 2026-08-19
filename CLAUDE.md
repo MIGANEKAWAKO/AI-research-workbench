@@ -46,29 +46,38 @@ AI research workbench/
 │     └─ main.tsx / App.tsx           # 入口（无路由，直接渲染 Home）
 ├─ backend/                   # FastAPI 后端
 │  └─ app/
-│     ├─ main.py                      # 全部路由：POST /api/chat(SSE 中转 DeepSeek) + / /health /ping
-│     ├─ config.py                    # dataclass 配置（dotenv：DEEPSEEK_API_KEY/BASE_URL/PORT）
-│     └─ prompts.py                   # 任务提示词模板（summarize/polish/continue）
+│     ├─ main.py                      # FastAPI 入口：lifespan 启动自动扫描 + 路由挂载 + /api/chat(SSE 中转 DeepSeek)
+│     ├─ config.py                    # dataclass 配置（dotenv：DEEPSEEK/SILICONFLOW key、VAULT_PATH、KB_DIR、PORT）
+│     ├─ prompts.py                   # 任务提示词模板（summarize/polish/continue）
+│     ├─ vault.py                     # vault 路径推导（default_vault_path/kb_root/chroma_dir，ADR-0001）
+│     ├─ metadata.py                  # B2 元数据补全（Crossref/arXiv，失败返回 {}）
+│     ├─ kb.py                        # B3 知识库核心（Chroma + embedding + 分块 + 增删查）
+│     ├─ literature.py                # B5 文献元数据持久层（literature.json 原子读写）
+│     ├─ indexer.py                   # B6 索引管理（mtime 增量扫描 + index_state.json）
+│     ├─ frontmatter.py               # B8 笔记 frontmatter 解析（indexer/export 共用）
+│     ├─ export.py                    # B8 导出服务（cites 聚合 + docx + BibTeX）
+│     ├─ citation_formats.py          # B8 引用格式化纯函数（GB/T 7714/APA/IEEE，★用户亲手实现）
+│     ├─ rag.py                       # B7 chat RAG 注入（★用户亲手实现，静默降级）
+│     └─ routers/
+│        ├─ fs.py                     # B4 vault 文件 API（/api/fs/*，防目录穿越）
+│        ├─ documents.py              # B5 文献导入与管理（/api/documents）
+│        ├─ kb_api.py                 # B6 索引状态与刷新（/api/kb）
+│        └─ export_api.py             # B8 导出（/api/export）
 ├─ CLAUDE.md                   # 本文件：项目指引
 ├─ 科研工作台需求文档.md      # PRD + 架构决策 + M1 排期 WBS（第 9 章）
 └─ AI协作开发流程.md          # 协作契约（每次开发会话必读）
 ```
 
-## 开发进度（截至 2026-08-14）
+## 开发进度（截至 2026-08-19）
 
-| 状态    | 内容                                                                                                                    |
-| ----- | --------------------------------------------------------------------------------------------------------------------- |
-| ✅ 完成  | 依赖清理：移除 dexie / dexie-react-hooks / react-router-dom，删除 db.ts，类型迁入 src/types/，Dexie 调用全部替换为 `useDataStore` 内存数据源，构建通过 |
-| ✅ 完成  | **F1 StorageAdapter 抽象**：接口 6 方法（用户写）+ `HttpFsAdapter`（fetch 后端 `/api/fs/*`）+ 工厂 + `useDataStore` 文件持久化（loadAll/saveNote/deleteNote），UI 层零改动，端到端验证 8/8 |
-| ✅ 完成  | **F2 笔记 Markdown 化**：`src/lib/note-file.ts`（frontmatter 读写纯函数）+ editor 保存改 `getMarkdown()` + 集合持久化 `.kb/collections.json` + tiptap-markdown 类型补充，纯函数 16/16 + 端到端 20/20 验证通过 |
-| ✅ 完成  | **F2 bugfix：gray-matter 浏览器 Buffer 崩溃**——弃用 gray-matter（其 utils.js 直接用全局 `Buffer.from`，浏览器必崩），自研 `src/lib/frontmatter.ts`（js-yaml@4，~50 行），格式兼容旧文件；bundle -275KB，浏览器侧 dump/load 验证通过 |
-| ✅ 完成  | **F3 侧边栏/列表文件模式改造**：笔记重命名（`renameNote`，只改 frontmatter title，文件名不动）+ 30s 轮询兜底（`refreshFromDisk(skipNoteId)`，跳过正在编辑的笔记防覆盖）+ title 权威化（自动保存不再用第一行覆盖标题），e2e 8/8 验证通过 |
-| ✅ 完成  | **F4 文献库 UI**：侧边栏 📝笔记\|📚文献 Tab 切换（无路由 state 方案）+ `useLiteratureStore` + `services/literature.ts`（B5 API 封装）+ 文献列表（搜索/状态过滤）+ 导入 Sheet（拖拽 + DOI/arXiv 补全交互 + 结果展示）+ 文献详情（元数据/反向引用/删除），e2e 12/12 验证通过；**注：元数据编辑依赖后端 PUT 接口（后续任务），详情当前只读** |
-| ✅ 完成  | **B5.1 导入自动提取 DOI**：`metadata.extract_doi`（纯函数，三种形态 + 尾部标点清洗）+ documents.py 导入流程改造（identifier 为空时扫前 2 页提取，pages 复用给索引，显式优先级不变），纯函数 9/9 + 集成 8/8（真实 PGFD-YOLO PDF 自动补全）验证通过 |
-| ⚠️ 当前 | 笔记以 Markdown + frontmatter 落盘，30s 轮询感知外部修改；文献库可导入/列表/删除（阅读器 F5 未接）；**tiptap-markdown@0.9 无 extendMarkdown**（引用徽章序列化推迟 F6 前置调研） |
-| ⬜ 下一步 | WBS F5（PDF 阅读器，最大单项）：pdfjs-dist + canvas 渲染 + text layer + 翻页/缩放/页码 + 划词浮层（转笔记引用 / 问 AI / 复制） |
+| 状态 | 内容 |
+|---|---|
+| ✅ 完成 | **后端 B1-B8 全部完成**：B1 依赖配置 → B2 元数据补全（Crossref/arXiv）→ B3 知识库（Chroma+bge-m3+中文分块）→ B4 vault 文件 API（防目录穿越）→ B5 文献导入管理（multipart+补全+索引+literature.json 原子写）→ B5.1 导入自动提取 DOI → B6 索引管理（mtime 增量 + lifespan 启动自动扫描）→ B7 chat RAG 注入（★用户亲手实现，静默降级）→ B8 导出（GB/T 7714/APA/IEEE 纯函数 ★用户亲手实现 + docx + BibTeX） |
+| ✅ 完成 | **前端 F1-F7 全部完成**：F1 StorageAdapter → F2 Markdown 化（+gray-matter Buffer 修复）→ F3 侧边栏文件模式 → F4 文献库 UI → F5 PDF 阅读器（pdfjs-dist + 划词转引用/问AI/复制）→ F6 引用系统 UI（Cite 内联节点 + markdown round-trip）→ F7 AI 面板适配（全局/单篇问答 + 划词提问） |
+| ⚠️ 当前 | **M1 功能开发收官，待联调**：T1 端到端（导入→阅读→划词引用→问答→导出）与 T2 回归（笔记编辑/任务模式/断网降级）尚未执行；已知遗留：文献元数据编辑接口（PUT /api/documents/{id}）未实现，F4 详情页只读；背景色节点序列化降级为纯文本 |
+| ⬜ 下一步 | T1/T2 联调验收；之后 M2（高亮批注、watchdog + SSE、Tauri 壳） |
 
-**前端当前存储架构**：`useDataStore`（Zustand）仍是唯一数据入口（内存缓存 = 响应式数据源）；`useNotes.ts` 保持对外 API 签名（saveNote/getNote），编辑器零改动。存储链路：UI → useDataStore → `StorageAdapter`（开发期 `HttpFsAdapter` → 后端 `/api/fs/*`）→ vault 文件（笔记 = Markdown + frontmatter，集合 = `.kb/collections.json`）。发布期换 Tauri 实现只需改工厂 `src/services/storage/index.ts` 一处。F3 起 UI 层将接触文件扫描/轮询，但 useNotes 对外 API 仍保持稳定。
+**存储架构**：`useDataStore`（Zustand）唯一数据入口（内存缓存 = 响应式数据源）+ `StorageAdapter`（开发期 `HttpFsAdapter` → 后端 `/api/fs/*`；发布期换 Tauri 只改工厂 `src/services/storage/index.ts` 一处）。后端直接读 vault 建索引（无前端推送链路，前端 30s 轮询兜底）。文献元数据真源 = 后端 `literature.json`（前端纯消费者，无内存缓存层）。
 
 ## 必读文档（按序）
 
