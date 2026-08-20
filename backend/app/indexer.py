@@ -160,6 +160,25 @@ def scan_and_index(force: bool = False) -> dict[str, Any]:
     return report
 
 
+def mark_paper_indexed(pdf_rel: str, doc_id: str, chunks: int) -> None:
+    """导入成功后同步 index_state（记录格式与 scan_and_index 一致），
+    避免 kb/status 误报"未索引"。失败由调用方降级（不阻断导入）。"""
+    state = _load_state()
+    pdf_abs = default_vault_path() / pdf_rel
+    mtime, size = _file_signature(pdf_abs)
+    state["paper"][pdf_rel] = {
+        "docId": doc_id, "mtime": mtime, "size": size, "chunks": chunks,
+    }
+    _save_state(state)
+
+
+def unmark_paper_indexed(pdf_rel: str) -> None:
+    """删除文献时同步移除 index_state 记录，避免 kb/status 虚高。"""
+    state = _load_state()
+    state["paper"].pop(pdf_rel, None)
+    _save_state(state)
+
+
 def get_index_status() -> dict[str, Any]:
     """索引健康度：chunk 数、已索引/未索引文件、上次扫描时间。"""
     vault = default_vault_path()
