@@ -15,7 +15,7 @@ from pathlib import Path
 import anyio
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from .. import kb, metadata
+from .. import indexer, kb, metadata
 from ..literature import LiteratureEntry, add_entry, get_entry, load_literature, remove_entry
 from ..vault import default_vault_path
 
@@ -125,9 +125,14 @@ async def import_document(
     try:
         if pages is None:
             pages = await anyio.to_thread.run_sync(kb.extract_pdf_pages, pdf_abs)
-        await anyio.to_thread.run_sync(
+        chunks = await anyio.to_thread.run_sync(
             kb.upsert_document, "paper", lit_id, entry.title, pages
         )
+        # T2 修复：索引成功后同步 index_state（避免 status 误报 unindexed）
+        try:
+            indexer.mark_paper_indexed(pdf_rel, lit_id, chunks)
+        except Exception as exc:
+            print("index_state 同步失败（不影响导入）:", repr(exc))
     except Exception as exc:
         print("文献索引失败（已降级）:", repr(exc))
 
@@ -162,6 +167,12 @@ def delete_document(lit_id: str):
         kb.delete_document(lit_id)
     except Exception as exc:
         print("索引清理失败（已降级）:", repr(exc))
+
+    # 2.5 T2 修复：同步移除 index_state 记录（避免 kb/status 虚高）
+    try:
+        indexer.unmark_paper_indexed(entry.pdfPath)
+    except Exception as exc:
+        print("index_state 清理失败（已降级）:", repr(exc))
 
     # 3. json 移除
     remove_entry(lit_id)
