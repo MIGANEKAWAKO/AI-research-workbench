@@ -74,8 +74,8 @@ AI research workbench/
 |---|---|
 | ✅ 完成 | **后端 B1-B8 全部完成**：B1 依赖配置 → B2 元数据补全（Crossref/arXiv）→ B3 知识库（Chroma+bge-m3+中文分块）→ B4 vault 文件 API（防目录穿越）→ B5 文献导入管理（multipart+补全+索引+literature.json 原子写）→ B5.1 导入自动提取 DOI → B6 索引管理（mtime 增量 + lifespan 启动自动扫描）→ B7 chat RAG 注入（★用户亲手实现，静默降级）→ B8 导出（GB/T 7714/APA/IEEE 纯函数 ★用户亲手实现 + docx + BibTeX） |
 | ✅ 完成 | **前端 F1-F7 全部完成**：F1 StorageAdapter → F2 Markdown 化（+gray-matter Buffer 修复）→ F3 侧边栏文件模式 → F4 文献库 UI → F5 PDF 阅读器（pdfjs-dist + 划词转引用/问AI/复制）→ F6 引用系统 UI（Cite 内联节点 + markdown round-trip）→ F7 AI 面板适配（全局/单篇问答 + 划词提问） |
-| ⚠️ 当前 | **M1 功能开发收官，待联调**：T1 端到端（导入→阅读→划词引用→问答→导出）与 T2 回归（笔记编辑/任务模式/断网降级）尚未执行；已知遗留：文献元数据编辑接口（PUT /api/documents/{id}）未实现，F4 详情页只读；背景色节点序列化降级为纯文本 |
-| ⬜ 下一步 | T1/T2 联调验收；之后 M2（高亮批注、watchdog + SSE、Tauri 壳） |
+| ✅ 完成 | **T1 端到端联调 + T2 回归**：全链路验收通过（导入→阅读→划词引用→问答→导出）；联调发现并修复 ①前端保存笔记同步 cites 到 frontmatter（B8 导出闭环）②导入/删除文献同步 index_state.json（kb/status 立即准确）；已知遗留：文献元数据编辑接口（PUT /api/documents/{id}）未实现（F4 详情页只读）、背景色节点序列化降级、chromadb 偶发索引损坏（强杀后端进程所致，删除 chroma_db 重建即可） |
+| ⬜ 下一步 | M2（高亮批注、watchdog + SSE、Tauri 壳） |
 
 **存储架构**：`useDataStore`（Zustand）唯一数据入口（内存缓存 = 响应式数据源）+ `StorageAdapter`（开发期 `HttpFsAdapter` → 后端 `/api/fs/*`；发布期换 Tauri 只改工厂 `src/services/storage/index.ts` 一处）。后端直接读 vault 建索引（无前端推送链路，前端 30s 轮询兜底）。文献元数据真源 = 后端 `literature.json`（前端纯消费者，无内存缓存层）。
 
