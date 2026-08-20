@@ -4,6 +4,7 @@ import { useNoteStore } from '@/store/useNoteStore'
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react'
 import MainToolbarContent from './MainToolbarContent'
 import MobileToolbarContent from './MobileToolbarContent'
+import EditorHeader from '@/components/EditorHeader'
 import { Bot } from "lucide-react";
 
 // extensions
@@ -207,53 +208,59 @@ const Editor = () => {
     }, [])
 
     return (
-        <div className='flex h-full w-full justify-center'>
-            <div className='simple-editor-wrapper'>
-                <EditorContext.Provider value={{ editor }}>
-                    <Toolbar
-                        ref={toolbarRef}
-                        style={{
-                            ...(isMobile
-                                ? {
-                                      bottom: `calc(100% - ${height - rect.y}px)`,
-                                  }
-                                : {}),
-                        }}
-                    >
-                        {mobileView === 'main' ? (
-                            <MainToolbarContent
-                                onHighlighterClick={() => setMobileView('highlighter')}
-                                onLinkClick={() => setMobileView('link')}
-                                isMobile={isMobile}
+        /* UI 重构 Step 4：页头（chip/标题/meta/编辑-预览）+ 编辑器内容区 */
+        <div className='flex h-full w-full flex-col overflow-hidden'>
+            <EditorHeader />
+
+            <div className='flex min-h-0 flex-1 justify-center'>
+                <div className='simple-editor-wrapper'>
+                    <EditorContext.Provider value={{ editor }}>
+                        <Toolbar
+                            ref={toolbarRef}
+                            style={{
+                                ...(isMobile
+                                    ? {
+                                          bottom: `calc(100% - ${height - rect.y}px)`,
+                                      }
+                                    : {}),
+                            }}
+                        >
+                            {mobileView === 'main' ? (
+                                <MainToolbarContent
+                                    onHighlighterClick={() => setMobileView('highlighter')}
+                                    onLinkClick={() => setMobileView('link')}
+                                    isMobile={isMobile}
+                                />
+                            ) : (
+                                <MobileToolbarContent
+                                    type={mobileView === 'highlighter' ? 'highlighter' : 'link'}
+                                    onBack={() => setMobileView('main')}
+                                />
+                            )}
+                        </Toolbar>
+
+                        <div className="flex flex-col h-full overflow-hidden">
+                            <EditorContent
+                                editor={editor}
+                                role='presentation'
+                                className='simple-editor-content'
                             />
-                        ) : (
-                            <MobileToolbarContent
-                                type={mobileView === 'highlighter' ? 'highlighter' : 'link'}
-                                onBack={() => setMobileView('main')}
-                            />
+                            {/* F6：笔记尾参考文献列表（扫描 cite 节点实时渲染） */}
+                            <CitationList editor={editor} />
+                        </div>
+
+                        {/* AI 唤醒按钮（设计稿 ai-reopen：面板折叠时显示，48px 圆形悬浮） */}
+                        {!isOpen && (
+                            <button
+                                onClick={toggleAi}
+                                title="打开 AI 助手"
+                                className="fixed right-[18px] bottom-[18px] z-[900] grid size-12 place-items-center rounded-full border border-border bg-card text-primary shadow-lg transition-colors hover:border-primary hover:bg-primary hover:text-white"
+                            >
+                                <Bot className="size-5" />
+                            </button>
                         )}
-                    </Toolbar>
-
-                    <div className="flex flex-col h-full overflow-hidden">
-                        <EditorContent
-                            editor={editor}
-                            role='presentation'
-                            className='simple-editor-content'
-                        />
-                        {/* F6：笔记尾参考文献列表（扫描 cite 节点实时渲染） */}
-                        <CitationList editor={editor} />
-                    </div>
-
-                    {/* AI 唤醒按钮 */}
-                    <button
-                        onClick={toggleAi}
-                        className={`fixed bottom-8 right-8 p-4 rounded-full shadow-2xl transition-all ${
-                            isOpen ? "bg-purple-600 text-white -translate-x-80" : "bg-white text-purple-600"
-                        }`}
-                    >
-                        <Bot className="h-6 w-6" />
-                    </button>
-                </EditorContext.Provider>
+                    </EditorContext.Provider>
+                </div>
             </div>
         </div>
     )

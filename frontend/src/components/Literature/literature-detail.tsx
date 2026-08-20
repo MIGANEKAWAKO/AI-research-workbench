@@ -1,27 +1,65 @@
-import { BookOpen, FileText, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { BookOpen, ClipboardCopy, FileText, MoreHorizontal, Plus, Star, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useLiteratureStore } from '@/store/useLiteratureStore'
 import { useDataStore } from '@/store/useDataStore'
+import { formatReference } from '@/lib/citation'
+import { cn } from '@/lib/utils'
+
+/** 设计稿 meta-cell：surface 底 + 边框的圆角信息格 */
+const MetaCell = ({ label, value }: { label: string; value: string }) => (
+    <div className="rounded-[10px] border border-border bg-card px-3.5 py-2.5">
+        <div className="mb-0.5 text-[11px] text-muted-foreground/70">{label}</div>
+        <div className="truncate text-[12.5px] font-medium text-foreground" title={value}>
+            {value}
+        </div>
+    </div>
+)
 
 /**
- * 文献详情（F4，渲染在中间面板文献模式下）：
- * 元数据展示 + 阅读状态 + 反向引用（扫笔记 cites 字段，F6 引用系统的前瞻实现）+ 删除
- * 注：元数据编辑/状态更新依赖后端 PUT 接口（后续任务，当前只读）
+ * 文献详情（F4 + UI 重构 Step 5，对齐设计稿 lit-detail）：
+ * 页头（状态 chip + meta + 收藏/更多占位 + 大标题）→ divider → meta-row 三格卡片
+ * （作者/期刊/年份）→ 元数据详情 → DOI 行（蓝色 mono）→ tags → 反向引用 →
+ * action-row（阅读 PDF / 复制引用）→ 底部删除（AlertDialog 确认）。
+ * 注：LiteratureEntry 无 abstract 字段（后端 B5 未抽取摘要），摘要块暂缺。
  */
 export const LiteratureDetail = () => {
     const entries = useLiteratureStore((s) => s.entries)
     const activeId = useLiteratureStore((s) => s.activeId)
     const remove = useLiteratureStore((s) => s.remove)
     const openReader = useLiteratureStore((s) => s.openReader)
+    const openUpload = useLiteratureStore((s) => s.openUpload)
     const notes = useDataStore((s) => s.notes)
+
+    const [deleteOpen, setDeleteOpen] = useState(false)
 
     const entry = entries.find((e) => e.id === activeId) ?? null
 
     if (!entry) {
         return (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-                <BookOpen className="h-10 w-10" />
-                <p className="text-sm">从左侧选择一篇文献查看详情</p>
-                <p className="text-xs">文献库功能：导入 PDF → 元数据补全 → 阅读 → 引用（F5 起）</p>
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+                <div className="grid size-14 place-items-center rounded-2xl bg-background text-muted-foreground">
+                    <BookOpen className="size-6" />
+                </div>
+                <div className="text-sm font-medium text-muted-foreground">选择一篇文献开始阅读</div>
+                <div className="text-xs text-muted-foreground/70">
+                    从左侧列表选择文献查看详情，或导入新的 PDF
+                </div>
+                <Button onClick={openUpload} className="mt-2">
+                    <Plus className="size-4" />
+                    导入文献
+                </Button>
             </div>
         )
     }
@@ -29,104 +67,185 @@ export const LiteratureDetail = () => {
     // 反向引用：扫笔记 cites 字段（文献 ID 匹配）
     const citedBy = notes.filter((n) => n.cites?.includes(entry.id))
 
-    const handleDelete = () => {
-        if (confirm(`确定要删除文献「${entry.title}」吗？\n将同时删除 PDF 文件与向量索引。`)) {
-            void remove(entry.id)
+    const handleDelete = async () => {
+        setDeleteOpen(false)
+        await remove(entry.id)
+        toast.success('文献已删除')
+    }
+
+    const handleCopyCitation = async () => {
+        try {
+            await navigator.clipboard.writeText(formatReference(entry))
+            toast.success('引用已复制到剪贴板')
+        } catch {
+            toast.error('复制失败，请重试')
         }
     }
 
-    const fields: { label: string; value: string }[] = [
-        { label: '作者', value: entry.authors.map((a) => `${a.given} ${a.family}`).join(', ') },
-        { label: '年份', value: entry.year ? String(entry.year) : '—' },
-        { label: '期刊/会议', value: entry.venue || '—' },
+    // 状态 chip 配色（设计稿 chip：圆角胶囊 + 边框）
+    const statusChipClass =
+        entry.status === '已读'
+            ? 'border-success/30 bg-success/10 text-success'
+            : entry.status === '在读'
+              ? 'border-warning/30 bg-warning/10 text-warning'
+              : 'border-border bg-background text-muted-foreground'
+
+    const authorsText = entry.authors.map((a) => `${a.given} ${a.family}`).join(', ') || '作者未知'
+
+    const detailFields: { label: string; value: string }[] = [
         { label: '卷/期/页码', value: [entry.volume, entry.issue, entry.pages].filter(Boolean).join(' / ') || '—' },
-        { label: 'DOI', value: entry.doi || '—' },
         { label: 'arXiv', value: entry.arxivId || '—' },
+        { label: 'PDF 路径', value: entry.pdfPath || '—' },
     ]
 
     return (
         <div className="flex h-full flex-col overflow-y-auto">
-            {/* 标题区 */}
-            <div className="border-b px-6 py-4">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                        <h1 className="text-lg font-semibold leading-snug">{entry.title}</h1>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            {entry.authors.map((a) => `${a.given} ${a.family}`).join(', ') || '作者未知'}
-                            {entry.year ? `（${entry.year}）` : ''}
-                        </p>
-                    </div>
+            {/* 页头（设计稿 editor-header） */}
+            <div className="flex flex-col gap-3 px-7 pt-5 pb-4">
+                <div className="flex items-center gap-3">
                     <span
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${
-                            entry.status === '已读'
-                                ? 'bg-green-100 text-green-700'
-                                : entry.status === '在读'
-                                  ? 'bg-amber-100 text-amber-700'
-                                  : 'bg-gray-100 text-gray-600'
-                        }`}
+                        className={cn(
+                            'inline-flex h-[26px] items-center rounded-full border px-2.5 text-xs font-medium',
+                            statusChipClass
+                        )}
                     >
                         {entry.status}
                     </span>
+
+                    <div className="ml-auto flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground">
+                            PDF · 被 {citedBy.length} 篇笔记引用
+                        </span>
+                        <button
+                            onClick={() => toast.info('收藏功能开发中')}
+                            title="收藏"
+                            className="grid size-[30px] place-items-center rounded-[7px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                        >
+                            <Star className="size-4" />
+                        </button>
+                        <button
+                            onClick={() => toast.info('更多操作开发中')}
+                            title="更多"
+                            className="grid size-[30px] place-items-center rounded-[7px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                        >
+                            <MoreHorizontal className="size-4" />
+                        </button>
+                    </div>
+                </div>
+                <h1 className="text-2xl leading-tight font-bold">{entry.title}</h1>
+            </div>
+
+            {/* divider（设计稿 .divider） */}
+            <div className="mx-7 h-px shrink-0 bg-border" />
+
+            {/* 正文（设计稿 .lit-detail） */}
+            <div className="flex flex-col gap-6 px-7 pt-6 pb-10">
+                {/* meta-row：作者 / 期刊 / 年份 三格卡片 */}
+                <div className="grid grid-cols-3 gap-3">
+                    <MetaCell label="作者" value={authorsText} />
+                    <MetaCell label="期刊" value={entry.venue || '—'} />
+                    <MetaCell label="年份" value={entry.year !== null && entry.year !== undefined ? String(entry.year) : '—'} />
+                </div>
+
+                {/* 其他元数据详情 */}
+                <div className="space-y-1.5 text-sm">
+                    {detailFields.map((f) => (
+                        <div key={f.label} className="flex gap-3">
+                            <dt className="w-20 shrink-0 text-muted-foreground">{f.label}</dt>
+                            <dd className="min-w-0 break-all text-muted-foreground/80">{f.value}</dd>
+                        </div>
+                    ))}
+                </div>
+
+                {/* DOI 行（设计稿 doi-row：蓝色 mono） */}
+                {entry.doi && (
+                    <div className="flex items-center gap-2 text-xs">
+                        <span className="font-medium text-muted-foreground">DOI</span>
+                        <span className="font-mono text-primary">{entry.doi}</span>
+                    </div>
+                )}
+
+                {/* tags（设计稿 tag-row） */}
+                {entry.tags?.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                        {entry.tags.map((t) => (
+                            <span
+                                key={t}
+                                className="inline-flex h-6 items-center rounded-full border border-border bg-background px-2.5 text-xs text-muted-foreground"
+                            >
+                                {t}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                {/* 反向引用 */}
+                <div>
+                    <h2 className="mb-2 text-sm font-medium text-muted-foreground">
+                        被笔记引用（{citedBy.length}）
+                    </h2>
+                    {citedBy.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                            暂无笔记引用此文献（在阅读器中划词可一键插入引用徽章）
+                        </p>
+                    ) : (
+                        <ul className="space-y-1">
+                            {citedBy.map((n) => (
+                                <li key={n.id} className="flex items-center gap-2 text-sm">
+                                    <FileText className="size-3.5 text-muted-foreground" />
+                                    {n.title}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+
+                {/* action-row（设计稿：阅读文献 primary + 复制引用 ghost） */}
+                <div className="flex gap-3">
+                    <Button onClick={() => openReader(entry.id)}>
+                        <BookOpen className="size-4" />
+                        阅读 PDF
+                    </Button>
+                    <Button variant="outline" onClick={handleCopyCitation}>
+                        <ClipboardCopy className="size-4" />
+                        复制引用
+                    </Button>
+                </div>
+
+                {/* 底部操作区：删除 */}
+                <div className="mt-auto border-t border-border pt-4">
+                    <button
+                        onClick={() => setDeleteOpen(true)}
+                        className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-destructive transition-colors hover:bg-destructive/10"
+                    >
+                        <Trash2 className="size-4" />
+                        删除文献（PDF + 索引 + 元数据）
+                    </button>
                 </div>
             </div>
 
-            {/* F5：阅读入口 */}
-            <div className="px-6 py-3">
-                <button
-                    onClick={() => openReader(entry.id)}
-                    className="flex items-center gap-1.5 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
-                >
-                    <BookOpen className="h-4 w-4" />
-                    阅读 PDF
-                </button>
-            </div>
-
-            {/* 元数据 */}
-            <div className="px-6 py-4">
-                <h2 className="mb-2 text-sm font-medium text-muted-foreground">元数据</h2>
-                <dl className="space-y-1.5 text-sm">
-                    {fields.map((f) => (
-                        <div key={f.label} className="flex gap-3">
-                            <dt className="w-20 shrink-0 text-muted-foreground">{f.label}</dt>
-                            <dd className="min-w-0 break-all">{f.value}</dd>
-                        </div>
-                    ))}
-                    <div className="flex gap-3">
-                        <dt className="w-20 shrink-0 text-muted-foreground">PDF 路径</dt>
-                        <dd className="min-w-0 break-all text-xs text-muted-foreground">{entry.pdfPath}</dd>
-                    </div>
-                </dl>
-            </div>
-
-            {/* 反向引用 */}
-            <div className="px-6 pb-4">
-                <h2 className="mb-2 text-sm font-medium text-muted-foreground">被笔记引用（{citedBy.length}）</h2>
-                {citedBy.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                        暂无笔记引用此文献（引用系统 F6 上线后可一键插入引用徽章）
-                    </p>
-                ) : (
-                    <ul className="space-y-1">
-                        {citedBy.map((n) => (
-                            <li key={n.id} className="flex items-center gap-2 text-sm">
-                                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                                {n.title}
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </div>
-
-            {/* 操作区 */}
-            <div className="mt-auto border-t px-6 py-4">
-                <button
-                    onClick={handleDelete}
-                    className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-red-600 transition-colors hover:bg-red-50"
-                >
-                    <Trash2 className="h-4 w-4" />
-                    删除文献（PDF + 索引 + 元数据）
-                </button>
-            </div>
+            {/* 删除确认（AlertDialog，替换 confirm） */}
+            <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                <AlertDialogContent className="w-[380px] max-w-full rounded-xl">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>删除文献</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            确定要删除文献「{entry.title}」吗？
+                            <br />
+                            将同时删除 PDF 文件与向量索引，此操作不可撤销。
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>取消</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDelete}
+                            className="bg-destructive text-white hover:bg-destructive/90"
+                        >
+                            删除
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

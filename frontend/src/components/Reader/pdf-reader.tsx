@@ -134,44 +134,56 @@ export function PdfReader() {
     }
 
     return (
-        <div className="flex h-full flex-col overflow-hidden bg-gray-100">
-            {/* 工具栏 */}
-            <div className="flex shrink-0 items-center gap-3 border-b bg-white px-4 py-2">
+        <div className="flex h-full flex-col overflow-hidden bg-background">
+            {/* 工具栏（UI 重构 Step 6，设计稿 reader-toolbar：48px、surface 底、返回蓝字、标题居中） */}
+            <div className="flex h-12 shrink-0 items-center gap-4 border-b border-border bg-card px-4">
+                {/* 返回详情（设计稿 .back：蓝色文字按钮） */}
                 <button
                     onClick={closeReader}
-                    className="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-gray-100"
+                    className="flex h-8 items-center gap-1.5 rounded-[7px] py-0 pl-2.5 pr-3 text-[13px] font-medium text-primary transition-colors hover:bg-background"
                     title="返回文献详情"
                 >
-                    <ArrowLeft className="h-4 w-4" />
-                    返回
+                    <ArrowLeft className="size-4" />
+                    返回详情
                 </button>
 
-                <div className="min-w-0 flex-1 truncate text-sm font-medium" title={entry.title}>
+                {/* 标题（设计稿 .rtitle：居中省略） */}
+                <div className="min-w-0 flex-1 truncate text-center text-[13px] text-muted-foreground" title={entry.title}>
                     {entry.title || '未命名文献'}
                 </div>
 
-                {/* F7：单篇问答入口（docId = 当前文献，AI 面板上下文条显示单篇） */}
-                <button
-                    onClick={toggleAiPanel}
-                    className={`flex items-center gap-1 rounded-md px-2 py-1 text-sm transition-colors ${
-                        isAiPanelOpen
-                            ? 'bg-purple-600 text-white'
-                            : 'text-muted-foreground hover:bg-gray-100'
-                    }`}
-                    title="问 AI（问答自动限定当前文献）"
-                >
-                    <Bot className="h-4 w-4" />
-                    问 AI
-                </button>
+                {/* 缩放组（设计稿 zoom-group：− 100% +） */}
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => zoom(scale - SCALE_STEP)}
+                        disabled={scale <= MIN_SCALE}
+                        className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-40"
+                        title="缩小"
+                    >
+                        <ZoomOut className="size-4" />
+                    </button>
+                    <span className="w-11 text-center font-mono text-xs text-foreground">
+                        {Math.round(scale * 100)}%
+                    </span>
+                    <button
+                        onClick={() => zoom(scale + SCALE_STEP)}
+                        disabled={scale >= MAX_SCALE}
+                        className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-40"
+                        title="放大"
+                    >
+                        <ZoomIn className="size-4" />
+                    </button>
+                </div>
 
+                {/* 页码组（设计稿 page-info：第 x / n 页） */}
                 <div className="flex items-center gap-1">
                     <button
                         onClick={() => goTo(pageNumber - 1)}
                         disabled={pageNumber <= 1}
-                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-gray-100 disabled:opacity-40"
+                        className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-40"
                         title="上一页"
                     >
-                        <ChevronLeft className="h-4 w-4" />
+                        <ChevronLeft className="size-4" />
                     </button>
                     <input
                         type="number"
@@ -184,38 +196,30 @@ export function PdfReader() {
                         }}
                         className="h-8 w-14 rounded-md border border-input bg-background px-1 text-center text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     />
-                    <span className="text-sm text-muted-foreground">/ {totalPages}</span>
+                    <span className="text-xs text-muted-foreground">/ {totalPages}</span>
                     <button
                         onClick={() => goTo(pageNumber + 1)}
                         disabled={pageNumber >= totalPages}
-                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-gray-100 disabled:opacity-40"
+                        className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-40"
                         title="下一页"
                     >
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="size-4" />
                     </button>
                 </div>
 
-                <div className="flex items-center gap-1">
-                    <button
-                        onClick={() => zoom(scale - SCALE_STEP)}
-                        disabled={scale <= MIN_SCALE}
-                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-gray-100 disabled:opacity-40"
-                        title="缩小"
-                    >
-                        <ZoomOut className="h-4 w-4" />
-                    </button>
-                    <span className="w-12 text-center text-xs text-muted-foreground">
-                        {Math.round(scale * 100)}%
-                    </span>
-                    <button
-                        onClick={() => zoom(scale + SCALE_STEP)}
-                        disabled={scale >= MAX_SCALE}
-                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-gray-100 disabled:opacity-40"
-                        title="放大"
-                    >
-                        <ZoomIn className="h-4 w-4" />
-                    </button>
-                </div>
+                {/* F7：单篇问答入口（docId = 当前文献，AI 面板上下文条显示单篇） */}
+                <button
+                    onClick={toggleAiPanel}
+                    className={`flex h-8 items-center gap-1 rounded-md px-2.5 text-[13px] transition-colors ${
+                        isAiPanelOpen
+                            ? 'bg-primary font-medium text-primary-foreground'
+                            : 'text-muted-foreground hover:bg-background hover:text-foreground'
+                    }`}
+                    title="问 AI（问答自动限定当前文献）"
+                >
+                    <Bot className="size-4" />
+                    问 AI
+                </button>
             </div>
 
             {/* 页面区 */}
@@ -229,7 +233,7 @@ export function PdfReader() {
                     )}
 
                     {!loading && error && (
-                        <div className="py-16 text-sm text-red-600">{error}</div>
+                        <div className="py-16 text-sm text-destructive">{error}</div>
                     )}
 
                     {!loading && !error && pdf && (

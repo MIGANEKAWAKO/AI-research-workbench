@@ -1,13 +1,14 @@
 :root {
   --tt-toolbar-height: 2.75rem;
   --tt-safe-area-bottom: env(safe-area-inset-bottom, 0px);
-  --tt-toolbar-bg-color: var(--white);
-  --tt-toolbar-border-color: var(--tt-gray-light-a-100);
+  /* UI 重构（临时）：编辑栏底色跟随页面背景，避免白色条突兀；后续随 html 重构编辑栏样式 */
+  --tt-toolbar-bg-color: var(--background);
+  --tt-toolbar-border-color: var(--border);
 }
 
 .dark {
-  --tt-toolbar-bg-color: var(--black);
-  --tt-toolbar-border-color: var(--tt-gray-dark-a-50);
+  --tt-toolbar-bg-color: var(--background);
+  --tt-toolbar-border-color: var(--border);
 }
 
 .tiptap-toolbar {

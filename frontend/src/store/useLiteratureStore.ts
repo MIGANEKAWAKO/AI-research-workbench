@@ -15,6 +15,7 @@ interface LiteratureState {
     loading: boolean
     importing: boolean
     error: string | null         // 最近一次操作错误（UI 展示后由 clearError 清除）
+    uploadOpen: boolean          // UI 重构：上传页是否打开（文献模式中间面板显示上传视图）
 
     load: () => Promise<void>
     importFile: (file: File, doi?: string, arxivId?: string) => Promise<LiteratureEntry | null>
@@ -22,6 +23,8 @@ interface LiteratureState {
     setActive: (id: string | null) => void
     openReader: (id: string) => void
     closeReader: () => void
+    openUpload: () => void
+    closeUpload: () => void
     clearError: () => void
 }
 
@@ -32,6 +35,7 @@ export const useLiteratureStore = create<LiteratureState>((set) => ({
     loading: false,
     importing: false,
     error: null,
+    uploadOpen: false,
 
     load: async () => {
         set({ loading: true, error: null })
@@ -78,5 +82,7 @@ export const useLiteratureStore = create<LiteratureState>((set) => ({
     setActive: (id) => set({ activeId: id }),
     openReader: (id) => set({ readerId: id, activeId: id }),
     closeReader: () => set({ readerId: null }),
+    openUpload: () => set({ uploadOpen: true }),
+    closeUpload: () => set({ uploadOpen: false }),
     clearError: () => set({ error: null }),
 }))

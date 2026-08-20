@@ -2,10 +2,11 @@ import { useNoteStore, type AiAskType } from '@/store/useNoteStore'
 import { useLiteratureStore } from '@/store/useLiteratureStore'
 import { useDataStore } from '@/store/useDataStore'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Send, User, Bot } from 'lucide-react'
+import { ChevronRight, Send, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { fetchAiResponse, type AiTaskType } from '@/services/ai'
+import { cn } from '@/lib/utils'
 
 type Message = {
     id: string
@@ -19,6 +20,9 @@ const AI_TASKS: { type: AiTaskType; label: string }[] = [
     { type: 'continue', label: '续写' },
 ]
 
+// UI 重构：设计稿快捷指令 chips（点击填入输入框）
+const QUICK_PROMPTS = ['总结当前笔记', '解释这段代码', '生成引用']
+
 // F7：划词提问的指令模板（对话模式发送，带 docId 限定当前文献）
 // 结尾不加冒号：消费时动态拼出处信息（文献标题 + 页码），见 aiTask effect
 const ASK_INSTRUCTIONS: Record<AiAskType, string> = {
@@ -31,6 +35,7 @@ const TYPEWRITER_INTERVAL_MS = 24
 
 const AIPanel = () => {
     const { activeNoteId, isAiPanelOpen } = useNoteStore()
+    const toggleAiPanel = useNoteStore((state) => state.toggleAiPanel)
     const aiTask = useNoteStore((state) => state.aiTask)
     const notes = useDataStore((state) => state.notes)
     const readerId = useLiteratureStore((state) => state.readerId)
@@ -47,6 +52,7 @@ const AIPanel = () => {
     const isFetchingRef = useRef(false)
     const typewriterQueueRef = useRef<string[]>([])
     const typewriterTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const inputRef = useRef<HTMLTextAreaElement>(null)
 
     // F7：单篇问答的上下文 = 正在阅读的文献（B7 协议 docId）
     const readerEntry = entries.find((e) => e.id === readerId) ?? null
@@ -210,20 +216,39 @@ const AIPanel = () => {
     if (!isAiPanelOpen) return null
 
     return (
-        <div className='flex flex-col h-full bg-white'>
-            <div className='p-4 border-b flex items-center justify-between bg-gray-50/50'>
-                <h2 className='text-sm font-semibold flex items-center gap-2'>
-                    <Bot className='w-4 h-4 text-purple-600' /> AI 助手
-                </h2>
+        <div className='flex h-full flex-col bg-card'>
+            {/* 头部（设计稿 ai-header：渐变 logo + 标题/在线 + 折叠按钮） */}
+            <div className='flex h-[52px] shrink-0 items-center gap-2.5 border-b border-border px-4'>
+                <div
+                    className='grid size-7 shrink-0 place-items-center rounded-lg text-white'
+                    style={{ background: 'linear-gradient(135deg, var(--primary), #7AA8FF)' }}
+                >
+                    <ShieldCheck className='size-4' strokeWidth={1.8} />
+                </div>
+                <div className='min-w-0'>
+                    <div className='text-sm font-bold'>AI 助手</div>
+                    <div className='flex items-center gap-1.5 text-[11px] text-success'>
+                        <span className='size-1.5 rounded-full bg-success' />
+                        在线
+                    </div>
+                </div>
+                <button
+                    onClick={toggleAiPanel}
+                    title='折叠'
+                    className='ml-auto grid size-9 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground'
+                >
+                    <ChevronRight className='size-4' />
+                </button>
             </div>
 
             {/* F7：问答范围指示条（单篇 = 正在阅读的文献；否则全局） */}
             <div
-                className={`px-4 py-1.5 text-xs border-b ${
+                className={cn(
+                    'border-b px-4 py-1.5 text-xs',
                     readerEntry
-                        ? 'bg-amber-50 text-amber-700 border-amber-100'
-                        : 'bg-gray-50 text-gray-500'
-                }`}
+                        ? 'border-warning/20 bg-warning/10 text-warning'
+                        : 'border-border bg-background text-muted-foreground'
+                )}
             >
                 {readerEntry ? (
                     <>
@@ -235,34 +260,37 @@ const AIPanel = () => {
                 )}
             </div>
 
-            <ScrollArea className='flex-1 p-4'>
-                <div className='space-y-4'>
+            {/* 消息区（设计稿 ai-messages：who 方块 + 气泡） */}
+            <ScrollArea className='flex-1'>
+                <div className='flex flex-col gap-3.5 p-4'>
                     {messages.length === 0 && (
-                        <p className='text-center text-xs text-muted-foreground mt-10'>
+                        <p className='mt-10 text-center text-xs text-muted-foreground'>
                             对话问答会检索你的知识库；在阅读器中提问则限定当前文献。
                         </p>
                     )}
                     {messages.map((msg) => (
-                        <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                        <div key={msg.id} className={`flex gap-2.5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                             <div
-                                className={`p-1 mt-1 rounded-full h-fit ${
-                                    msg.role === 'user' ? 'bg-purple-100' : 'bg-gray-100'
-                                }`}
-                            >
-                                {msg.role === 'user' ? (
-                                    <User className='w-3 h-3' />
-                                ) : (
-                                    <Bot className='w-3 h-3 text-purple-600' />
+                                className={cn(
+                                    'grid size-[26px] shrink-0 place-items-center rounded-lg text-xs font-bold text-white',
+                                    msg.role === 'user'
+                                        ? 'bg-primary'
+                                        : 'bg-gradient-to-br from-primary to-[#7AA8FF]'
                                 )}
+                            >
+                                {msg.role === 'user' ? '我' : 'AI'}
                             </div>
                             <div
-                                className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${
-                                    msg.role === 'user' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-800'
-                                }`}
+                                className={cn(
+                                    'max-w-[85%] rounded-xl px-3 py-2.5 text-[13.5px] leading-relaxed break-words whitespace-pre-wrap',
+                                    msg.role === 'user'
+                                        ? 'rounded-tr-[3px] bg-primary text-primary-foreground'
+                                        : 'rounded-tl-[3px] bg-muted text-foreground'
+                                )}
                             >
                                 {msg.content}
                                 {msg.id === typingMessageId && msg.content && (
-                                    <span className='ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-gray-500' />
+                                    <span className='ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-foreground/60' />
                                 )}
                             </div>
                         </div>
@@ -273,8 +301,10 @@ const AIPanel = () => {
                 </div>
             </ScrollArea>
 
-            <div className='p-4 border-t'>
-                <div className='mb-3 flex flex-wrap items-center gap-2'>
+            {/* 输入区（设计稿 ai-input：任务按钮 + 快捷 chips + box） */}
+            <div className='flex shrink-0 flex-col gap-2 border-t border-border p-3'>
+                {/* 任务模式按钮（保留功能，视觉微调） */}
+                <div className='flex flex-wrap items-center gap-1.5'>
                     {AI_TASKS.map((task) => (
                         <Button
                             key={task.type}
@@ -285,17 +315,37 @@ const AIPanel = () => {
                                 setSelectedTaskType((prev) => (prev === task.type ? null : task.type))
                             }
                             disabled={isLoading}
+                            className='h-7 px-2.5 text-xs'
                         >
                             {task.label}
                         </Button>
                     ))}
-                    <span className='text-xs text-muted-foreground'>
+                    <span className='text-[11px] text-muted-foreground'>
                         {selectedTaskType ? '任务模式（处理输入文本）' : '对话问答（RAG 检索）'}
                     </span>
                 </div>
-                <div className='relative flex items-end gap-2'>
+
+                {/* 快捷指令 chips（设计稿 quick-row，点击填入输入框） */}
+                <div className='flex flex-wrap gap-2'>
+                    {QUICK_PROMPTS.map((p) => (
+                        <button
+                            key={p}
+                            onClick={() => {
+                                setInput(p)
+                                inputRef.current?.focus()
+                            }}
+                            className='rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground'
+                        >
+                            {p}
+                        </button>
+                    ))}
+                </div>
+
+                {/* 输入框（设计稿 box：textarea + 蓝色发送按钮） */}
+                <div className='flex items-end gap-2 rounded-[10px] border border-border bg-background p-2.5'>
                     <textarea
-                        rows={3}
+                        ref={inputRef}
+                        rows={1}
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => {
@@ -304,19 +354,19 @@ const AIPanel = () => {
                                 void handleSend()
                             }
                         }}
-                        placeholder='输入问题并按 Enter 发送；或先选任务按钮处理文本...'
-                        className='w-full resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50'
+                        placeholder='向知微提问，或输入 / 调用指令…'
+                        className='max-h-[120px] flex-1 resize-none bg-transparent text-[13.5px] leading-relaxed outline-none placeholder:text-muted-foreground/60'
                     />
-                    <Button
-                        size='icon'
-                        className='rounded-full h-8 w-8 shrink-0 mb-1'
+                    <button
                         onClick={() => {
                             void handleSend()
                         }}
                         disabled={isLoading || !input.trim()}
+                        title='发送'
+                        className='grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-[filter] hover:brightness-110 disabled:opacity-40'
                     >
-                        <Send className='h-4 w-4' />
-                    </Button>
+                        <Send className='size-4' />
+                    </button>
                 </div>
             </div>
         </div>
