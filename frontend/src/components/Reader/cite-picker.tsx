@@ -32,15 +32,17 @@ export function CitePicker({ open, literature, pageNumber, text, onClose }: Cite
     const handleConfirm = () => {
         if (mode === 'new') {
             const title = newTitle.trim() || '文献笔记'
-            saveNote({ title, content: markdown })
+            // T1 修复：划词转笔记同步 cites（→ frontmatter cites，B8 导出依赖）
+            saveNote({ title, content: markdown, cites: [literature.id] })
         } else if (noteId !== '') {
             const note = notes.find((n) => n.id === noteId)
             if (note) {
-                // 追加到末尾（空正文不加前置空行）
+                // 追加到末尾（空正文不加前置空行）；cites 合并去重（下次编辑器保存全量修正）
                 const content = note.content
                     ? `${note.content}\n\n${markdown}`
                     : markdown
-                saveNote({ ...note, content })
+                const cites = [...new Set([...(note.cites ?? []), literature.id])]
+                saveNote({ ...note, content, cites })
             }
         }
         // 重置下次打开的状态
