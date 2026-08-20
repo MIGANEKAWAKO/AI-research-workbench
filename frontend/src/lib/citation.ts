@@ -1,4 +1,5 @@
 import type { LiteratureEntry } from '@/types'
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 
 /**
  * 引用系统（F6）的格式化纯函数。
@@ -7,6 +8,22 @@ import type { LiteratureEntry } from '@/types'
  * 完整 GB/T 7714 / APA / IEEE 格式化是后端 B8 的纯函数（用户亲手实现），
  * 这里只提供前端「徽章」与「参考文献列表」所需的简化展示格式。
  */
+
+/**
+ * 从文档树收集 cite 节点 id（去重保序）。
+ * 用途：编辑器保存时把文档里的引用同步到 note.cites（→ frontmatter cites，
+ * B8 导出与反向引用依赖它）；与 CitationList 的扫描逻辑同源。
+ */
+export function collectCiteIds(doc: ProseMirrorNode): string[] {
+    const ids: string[] = []
+    doc.descendants((node) => {
+        const id = node.attrs?.id
+        if (node.type.name === 'cite' && typeof id === 'string' && id && !ids.includes(id)) {
+            ids.push(id)
+        }
+    })
+    return ids
+}
 
 /** 作者姓氏列表（family，缺 family 时退回 given），空值过滤 */
 export function authorFamilies(entry: LiteratureEntry): string[] {

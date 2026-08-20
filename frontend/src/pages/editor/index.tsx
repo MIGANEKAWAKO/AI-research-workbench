@@ -26,6 +26,7 @@ import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/imag
 import { HorizontalRule } from '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension'
 import { Cite } from '@/components/tiptap-node/cite-node/cite-node-extension'
 import { CitationList } from '@/components/CitationList'
+import { collectCiteIds } from '@/lib/citation'
 import '@/components/tiptap-node/blockquote-node/blockquote-node.scss'
 import '@/components/tiptap-node/code-block-node/code-block-node.scss'
 import '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss'
@@ -81,9 +82,14 @@ const Editor = () => {
                 // 新建/重命名决定，见 useDataStore.renameNote），只保存正文
                 const content = editorInstance.storage.markdown.getMarkdown()
 
+                // T1 修复：把文档里的 cite 节点同步到 cites（→ frontmatter cites，
+                // B8 导出与反向引用依赖它）。全量扫描，删除引用后自动为空。
+                const cites = collectCiteIds(editorInstance.state.doc)
+
                 await saveNote({
                     ...existingNote,
                     content,
+                    cites,
                     updatedAt: Date.now(),
                 })
             }, 600)
