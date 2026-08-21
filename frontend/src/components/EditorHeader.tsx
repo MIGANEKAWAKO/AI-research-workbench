@@ -31,9 +31,10 @@ function formatRelativeTime(ts: number): string {
 /**
  * 编辑器页头（UI 重构 Step 4，对齐设计稿 editor-header）：
  * chip（所属集合）+ meta（更新时间/字数）+ 收藏/更多占位 + 标题（点击重命名）
- * + 编辑/预览 view-toggle（预览为 UI 占位，功能后续实现）。
+ * + toolbar 行：格式化按钮组（prop 传入，Tiptap 工具）+ 编辑/预览 view-toggle。
+ * 设计稿：工具栏位于标题下方（与标题同区域），下方有 divider 与正文隔开。
  */
-const EditorHeader = () => {
+const EditorHeader = ({ toolbar }: { toolbar?: React.ReactNode }) => {
     const activeNoteId = useNoteStore((s) => s.activeNoteId)
     const notes = useDataStore((s) => s.notes)
     const collections = useDataStore((s) => s.collections)
@@ -69,7 +70,7 @@ const EditorHeader = () => {
     }
 
     return (
-        <div className="flex flex-col gap-3 px-7 pt-5 pb-4">
+        <div className="flex shrink-0 flex-col gap-3 px-7 pt-5 pb-4">
             {/* header-top：chip + 右侧 meta/收藏/更多 */}
             <div className="flex items-center gap-3">
                 <span className="inline-flex h-[26px] items-center gap-1.5 rounded-full border border-border bg-background px-2.5 text-xs text-muted-foreground">
@@ -110,34 +111,37 @@ const EditorHeader = () => {
                 </button>
             </div>
 
-            {/* toolbar：编辑/预览 view-toggle（设计稿样式，预览为占位） */}
-            <div className="flex items-center">
-                <div className="ml-auto flex rounded-lg bg-background p-[3px]">
-                    <button
-                        onClick={() => setViewMode('edit')}
-                        className={cn(
-                            'rounded-md px-3 py-[5px] text-xs transition-colors',
-                            viewMode === 'edit'
-                                ? 'bg-card font-medium text-foreground'
-                                : 'text-muted-foreground hover:text-foreground'
-                        )}
-                    >
-                        编辑
-                    </button>
-                    <button
-                        onClick={() => {
-                            setViewMode('preview')
-                            toast.info('预览功能开发中，敬请期待')
-                        }}
-                        className={cn(
-                            'rounded-md px-3 py-[5px] text-xs transition-colors',
-                            viewMode === 'preview'
-                                ? 'bg-card font-medium text-foreground'
-                                : 'text-muted-foreground hover:text-foreground'
-                        )}
-                    >
-                        预览
-                    </button>
+            {/* toolbar 行（设计稿：格式化按钮组在标题下方，右侧编辑/预览切换） */}
+            <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1 overflow-x-auto">{toolbar}</div>
+                <div className="shrink-0">
+                    <div className="flex rounded-lg bg-background p-[3px]">
+                        <button
+                            onClick={() => setViewMode('edit')}
+                            className={cn(
+                                'rounded-md px-3 py-[5px] text-xs transition-colors',
+                                viewMode === 'edit'
+                                    ? 'bg-card font-medium text-foreground'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            )}
+                        >
+                            编辑
+                        </button>
+                        <button
+                            onClick={() => {
+                                setViewMode('preview')
+                                toast.info('预览功能开发中，敬请期待')
+                            }}
+                            className={cn(
+                                'rounded-md px-3 py-[5px] text-xs transition-colors',
+                                viewMode === 'preview'
+                                    ? 'bg-card font-medium text-foreground'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            )}
+                        >
+                            预览
+                        </button>
+                    </div>
                 </div>
             </div>
 
