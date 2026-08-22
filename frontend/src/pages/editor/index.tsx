@@ -27,6 +27,7 @@ import { Markdown } from 'tiptap-markdown'
 // node
 import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension'
 import { HorizontalRule } from '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension'
+import { Callout } from '@/components/tiptap-node/callout-node/callout-node-extension'
 import { Cite } from '@/components/tiptap-node/cite-node/cite-node-extension'
 import { CitationList } from '@/components/CitationList'
 import { collectCiteIds } from '@/lib/citation'
@@ -37,6 +38,7 @@ import '@/components/tiptap-node/list-node/list-node.scss'
 import '@/components/tiptap-node/image-node/image-node.scss'
 import '@/components/tiptap-node/heading-node/heading-node.scss'
 import '@/components/tiptap-node/paragraph-node/paragraph-node.scss'
+import '@/components/tiptap-node/callout-node/callout-node.scss'
 
 // hooks
 import { useIsBreakpoint } from '@/hooks/use-is-breakpoint'
@@ -140,6 +142,7 @@ const Editor = () => {
                 onError: (error) => console.error('Upload failed:', error),
             }),
             Cite,
+            Callout,
             Markdown,
         ],
         onUpdate: ({ editor }) => {

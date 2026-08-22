@@ -1,0 +1,28 @@
+/* Callout 提示框（UI 重构 T2，对齐设计稿 .callout） */
+.tiptap.ProseMirror {
+  .callout {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: var(--blue-soft, rgba(47, 107, 255, 0.1));
+    color: var(--foreground);
+  }
+
+  .callout-ic {
+    color: var(--primary);
+    flex: 0 0 18px;
+    align-self: flex-start;
+    margin-top: 1px;
+  }
+
+  .callout-bd {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .callout-bd p {
+    margin: 0;
+    line-height: 1.7;
+  }
+}
