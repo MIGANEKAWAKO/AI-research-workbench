@@ -22,3 +22,27 @@ def kb_root() -> Path:
 
 def chroma_dir() -> Path:
     return kb_root() / "chroma_db"
+
+
+class VaultPathError(ValueError):
+    """vault 相对路径越界或非法。"""
+
+
+def _normalize_relative(relative: str) -> str:
+    """去掉首部斜杠与 . 段，空串表示 vault 根。"""
+    relative = (relative or "").strip().replace("\\", "/")
+    while relative.startswith("./"):
+        relative = relative[2:]
+    return relative.lstrip("/")
+
+
+def resolve_vault_path(relative: str) -> Path:
+    """vault 内相对路径 → 绝对路径；越界抛 VaultPathError（resolve 防 ../ 与符号链接）。
+
+    fs 路由与 agent 的 note_read 共用此安全边界（单一实现，ADR-0001 路径语义）。
+    """
+    vault = default_vault_path().resolve()
+    target = (vault / _normalize_relative(relative)).resolve()
+    if not target.is_relative_to(vault):
+        raise VaultPathError(f"路径越界: {relative!r}")
+    return target
