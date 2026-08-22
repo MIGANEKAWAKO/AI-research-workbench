@@ -2,10 +2,13 @@ import { useNoteStore, type AiAskType } from '@/store/useNoteStore'
 import { useLiteratureStore } from '@/store/useLiteratureStore'
 import { useDataStore } from '@/store/useDataStore'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronRight, Send, ShieldCheck } from 'lucide-react'
+import { ChevronRight, Globe, Send, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { fetchAiResponse, type AiTaskType } from '@/services/ai'
+import { fetchResearchTask } from '@/services/research'
+import ResearchTaskView from './ResearchTaskView'
+import type { ResearchEvent, ResearchTaskState } from '@/types/research'
 import { cn } from '@/lib/utils'
 
 type Message = {
@@ -53,6 +56,13 @@ const AIPanel = () => {
     const typewriterQueueRef = useRef<string[]>([])
     const typewriterTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const inputRef = useRef<HTMLTextAreaElement>(null)
+
+    // A6：研究任务模式（与任务模式互斥；过程进 ResearchTaskView，答案进消息流）
+    const [researchMode, setResearchMode] = useState(false)
+    const [enableWeb, setEnableWeb] = useState(false)
+    const [researchRunning, setResearchRunning] = useState(false)
+    const [researchState, setResearchState] = useState<ResearchTaskState | null>(null)
+    const researchAnswerRef = useRef('')
 
     // F7：单篇问答的上下文 = 正在阅读的文献（B7 协议 docId）
     const readerEntry = entries.find((e) => e.id === readerId) ?? null
@@ -196,9 +206,153 @@ const AIPanel = () => {
         ]
     )
 
+    /** A6：researchState 补丁（s 可能为 null——首个事件到达前 state 未初始化）。 */
+    const patchResearchState = useCallback(
+        (patch: (s: ResearchTaskState) => ResearchTaskState) => {
+            setResearchState((prev) =>
+                patch(prev ?? { taskId: '', status: 'created', steps: [], error: null })
+            )
+        },
+        []
+    )
+
+    /**
+     * A6：研究任务 SSE 事件分发 → researchState 更新。
+     * 答案不在这里展示：answer.delta 只累积，task.completed 时进消息流（打字机）。
+     */
+    const handleResearchEvent = useCallback(
+        (ev: ResearchEvent) => {
+            switch (ev.type) {
+                case 'task.created':
+                    patchResearchState((s) => ({ ...s, taskId: ev.task_id, status: 'created' }))
+                    break
+                case 'plan.created':
+                    patchResearchState((s) => ({
+                        ...s,
+                        status: 'planning',
+                        steps: ev.steps.map((st) => ({
+                            id: st.id,
+                            title: st.title,
+                            status: 'pending' as const,
+                            toolCalls: [],
+                        })),
+                    }))
+                    break
+                case 'step.started':
+                    patchResearchState((s) => ({
+                        ...s,
+                        status: 'executing',
+                        steps: s.steps.map((st) =>
+                            st.id === ev.step_id ? { ...st, status: 'running' as const } : st
+                        ),
+                    }))
+                    break
+                case 'tool.call':
+                    patchResearchState((s) => ({
+                        ...s,
+                        steps: s.steps.map((st) =>
+                            st.id === ev.step_id
+                                ? { ...st, toolCalls: [...st.toolCalls, { tool: ev.tool, ok: null }] }
+                                : st
+                        ),
+                    }))
+                    break
+                case 'tool.result':
+                    patchResearchState((s) => ({
+                        ...s,
+                        steps: s.steps.map((st) => {
+                            if (st.id !== ev.step_id) return st
+                            // 补齐该步骤内第一个尚未出结果的同工具调用（按顺序对应）
+                            const targetIdx = st.toolCalls.findIndex(
+                                (tc) => tc.tool === ev.tool && tc.ok === null
+                            )
+                            return {
+                                ...st,
+                                toolCalls: st.toolCalls.map((tc, idx) =>
+                                    idx === targetIdx ? { ...tc, ok: ev.ok, error: ev.error ?? null } : tc
+                                ),
+                            }
+                        }),
+                    }))
+                    break
+                case 'step.completed':
+                    patchResearchState((s) => ({
+                        ...s,
+                        steps: s.steps.map((st) =>
+                            st.id === ev.step_id ? { ...st, status: 'completed' as const } : st
+                        ),
+                    }))
+                    break
+                case 'answer.delta':
+                    researchAnswerRef.current += ev.content
+                    patchResearchState((s) => ({ ...s, status: 'synthesizing' }))
+                    break
+                case 'task.completed':
+                    patchResearchState((s) => ({ ...s, status: 'completed' }))
+                    // 答案进消息流：复用现有气泡 + 打字机
+                    const answer = researchAnswerRef.current
+                    if (answer) {
+                        const aiMsg = createMessage('ai', '')
+                        setMessages((prev) => [...prev, aiMsg])
+                        activeAiMessageIdRef.current = aiMsg.id
+                        setTypingMessageId(aiMsg.id)
+                        typewriterQueueRef.current = []
+                        enqueueTypewriterText(answer)
+                    }
+                    break
+                case 'task.error':
+                    patchResearchState((s) => ({
+                        ...s,
+                        status: 'failed',
+                        error: { code: ev.code, message: ev.message, recoverable: ev.recoverable },
+                    }))
+                    break
+            }
+        },
+        [patchResearchState, createMessage, enqueueTypewriterText]
+    )
+
+    /**
+     * A6：发起研究任务（研究模式专用）。
+     * scope：阅读器打开时单篇限定（与对话模式同语义，docId = readerId）。
+     */
+    const sendResearchTask = useCallback(
+        async (content: string) => {
+            const question = content.trim()
+            if (!question || isLoading || researchRunning) return
+
+            const userMsg = createMessage('user', question)
+            setMessages((prev) => [...prev, userMsg])
+            setInput('')
+            setResearchRunning(true)
+            setResearchState({ taskId: '', status: 'created', steps: [], error: null })
+            researchAnswerRef.current = ''
+
+            const scope = readerId ? { doc_id: readerId } : undefined
+
+            try {
+                await fetchResearchTask({ question, enableWeb, scope }, handleResearchEvent)
+            } catch (error) {
+                console.error(error)
+                patchResearchState((s) => ({
+                    ...s,
+                    status: 'failed',
+                    error: { code: 'NETWORK', message: '任务中断：后端不可用，请稍后重试。', recoverable: true },
+                }))
+            } finally {
+                setResearchRunning(false)
+            }
+        },
+        [isLoading, researchRunning, readerId, enableWeb, createMessage, handleResearchEvent, patchResearchState]
+    )
+
     const handleSend = useCallback(() => {
-        void sendMessage(input, selectedTaskType ?? undefined)
-    }, [input, selectedTaskType, sendMessage])
+        if (researchMode) {
+            void sendResearchTask(input)
+        } else {
+            void sendMessage(input, selectedTaskType ?? undefined)
+        }
+    }, [researchMode, input, selectedTaskType, sendMessage, sendResearchTask])
 
     // F7：划词提问（解释/翻译/总结）→ 打开面板（prefillAiTask 已开）+ 自动发送对话模式消息
     // bugfix：带出处信息（文献标题 + 页码），AI 回答的来源标注与划词页码一致
@@ -263,6 +417,8 @@ const AIPanel = () => {
             {/* 消息区（设计稿 ai-messages：who 方块 + 气泡） */}
             <ScrollArea className='flex-1'>
                 <div className='flex flex-col gap-3.5 p-4'>
+                    {/* A6：研究任务进度区（过程展示；答案进消息流） */}
+                    {researchMode && researchState && <ResearchTaskView state={researchState} />}
                     {messages.length === 0 && (
                         <p className='mt-10 text-center text-xs text-muted-foreground'>
                             对话问答会检索你的知识库；在阅读器中提问则限定当前文献。
@@ -303,43 +459,79 @@ const AIPanel = () => {
 
             {/* 输入区（设计稿 ai-input：任务按钮 + 快捷 chips + box） */}
             <div className='flex shrink-0 flex-col gap-2 border-t border-border p-3'>
-                {/* 任务模式按钮（保留功能，视觉微调） */}
+                {/* 模式按钮：任务模式（总结/润色/续写）与研究任务互斥 */}
                 <div className='flex flex-wrap items-center gap-1.5'>
-                    {AI_TASKS.map((task) => (
-                        <Button
-                            key={task.type}
+                    {!researchMode &&
+                        AI_TASKS.map((task) => (
+                            <Button
+                                key={task.type}
+                                type='button'
+                                size='sm'
+                                variant={selectedTaskType === task.type ? 'default' : 'outline'}
+                                onClick={() => {
+                                    setResearchMode(false)
+                                    setSelectedTaskType((prev) => (prev === task.type ? null : task.type))
+                                }}
+                                disabled={isLoading || researchRunning}
+                                className='h-7 px-2.5 text-xs'
+                            >
+                                {task.label}
+                            </Button>
+                        ))}
+                    <Button
+                        type='button'
+                        size='sm'
+                        variant={researchMode ? 'default' : 'outline'}
+                        onClick={() => {
+                            setResearchMode((prev) => !prev)
+                            setSelectedTaskType(null)
+                        }}
+                        disabled={isLoading || researchRunning}
+                        className='h-7 px-2.5 text-xs'
+                    >
+                        研究任务
+                    </Button>
+                    {researchMode && (
+                        <button
                             type='button'
-                            size='sm'
-                            variant={selectedTaskType === task.type ? 'default' : 'outline'}
-                            onClick={() =>
-                                setSelectedTaskType((prev) => (prev === task.type ? null : task.type))
-                            }
-                            disabled={isLoading}
-                            className='h-7 px-2.5 text-xs'
+                            onClick={() => setEnableWeb((prev) => !prev)}
+                            disabled={researchRunning}
+                            className={`flex h-7 items-center gap-1 rounded-lg border px-2.5 text-xs transition-colors ${
+                                enableWeb
+                                    ? 'border-primary/50 bg-primary/10 text-primary'
+                                    : 'border-border bg-background text-muted-foreground hover:text-foreground'
+                            }`}
                         >
-                            {task.label}
-                        </Button>
-                    ))}
+                            <Globe className='size-3' />
+                            联网 {enableWeb ? '开' : '关'}
+                        </button>
+                    )}
                     <span className='text-[11px] text-muted-foreground'>
-                        {selectedTaskType ? '任务模式（处理输入文本）' : '对话问答（RAG 检索）'}
+                        {researchMode
+                            ? '研究任务（Agent 多步执行）'
+                            : selectedTaskType
+                              ? '任务模式（处理输入文本）'
+                              : '对话问答（RAG 检索）'}
                     </span>
                 </div>
 
-                {/* 快捷指令 chips（设计稿 quick-row，点击填入输入框） */}
-                <div className='flex flex-wrap gap-2'>
-                    {QUICK_PROMPTS.map((p) => (
-                        <button
-                            key={p}
-                            onClick={() => {
-                                setInput(p)
-                                inputRef.current?.focus()
-                            }}
-                            className='rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground'
-                        >
-                            {p}
-                        </button>
-                    ))}
-                </div>
+                {/* 快捷指令 chips（设计稿 quick-row，点击填入输入框；研究模式下隐藏） */}
+                {!researchMode && (
+                    <div className='flex flex-wrap gap-2'>
+                        {QUICK_PROMPTS.map((p) => (
+                            <button
+                                key={p}
+                                onClick={() => {
+                                    setInput(p)
+                                    inputRef.current?.focus()
+                                }}
+                                className='rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground'
+                            >
+                                {p}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 {/* 输入框（设计稿 box：textarea + 蓝色发送按钮） */}
                 <div className='flex items-end gap-2 rounded-[10px] border border-border bg-background p-2.5'>
@@ -361,7 +553,7 @@ const AIPanel = () => {
                         onClick={() => {
                             void handleSend()
                         }}
-                        disabled={isLoading || !input.trim()}
+                        disabled={isLoading || researchRunning || !input.trim()}
                         title='发送'
                         className='grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-[filter] hover:brightness-110 disabled:opacity-40'
                     >
