@@ -82,6 +82,27 @@ def tool_call(name="search", query="RAG", tc_id="call_1") -> ToolCallRequest:
     return ToolCallRequest(id=tc_id, name=name, arguments={"query": query})
 
 
+def assert_protocol_compliant(messages: list[dict]) -> None:
+    """OpenAI 工具协议：role=tool 消息必须跟随一条带 tool_calls 的 assistant 消息。
+
+    同一批多个 tool 消息可连续排列（都跟在同一条 assistant 后）；
+    真实 DeepSeek API 违反配对要求直接 400（A6 联调踩坑），Mock 不校验协议，必须显式断言。
+    """
+    for i, msg in enumerate(messages):
+        if msg["role"] != "tool":
+            continue
+        j = i - 1
+        while j >= 0 and messages[j]["role"] == "tool":  # 跳过同批 tool 消息
+            j -= 1
+        assert j >= 0 and messages[j]["role"] == "assistant", (
+            f"tool 消息必须跟随带 tool_calls 的 assistant: {messages[max(0, j):i + 1]}"
+        )
+        tool_calls = messages[j].get("tool_calls")
+        assert tool_calls, f"assistant 消息必须带 tool_calls: {messages[j]}"
+        ids = {tc["id"] for tc in tool_calls}
+        assert msg["tool_call_id"] in ids, f"tool_call_id 不在 assistant.tool_calls 中: {msg}"
+
+
 def run_task(orchestrator, question="研究问题", enable_web=False):
     task = ResearchTask(task_id="t_1", question=question, enable_web=enable_web)
     collector = EventCollector()
@@ -217,6 +238,47 @@ def test_internal_exception_fails_task():
     assert task.status == TaskStatus.FAILED
     error_event = next(ev for ev in collector.events if ev["type"] == "task.error")
     assert error_event["code"] == "INTERNAL" and error_event["recoverable"] is False
+
+
+# ---- OpenAI 工具协议合规（role=tool 必须跟在带 tool_calls 的 assistant 后） ----
+
+def test_tool_messages_follow_assistant_tool_calls():
+    """修复回归：A6 联调踩坑——缺 assistant(tool_calls) 消息导致 DeepSeek 400。"""
+    llm = MockLLM(
+        plan_content="",
+        rounds=[LLMReply(tool_calls=[tool_call()]), LLMReply(content="答案")],
+    )
+    _, _ = run_task(ResearchOrchestrator(ToolRegistry([SearchTool()]), llm))
+
+    second_call_messages = llm.calls[1][0]  # 第二轮 complete 收到的完整历史
+    assert_protocol_compliant(second_call_messages)
+    # 且 assistant 消息的 tool_calls 与 tool 消息配对（同一 id）
+    assistant = second_call_messages[-2]
+    assert assistant["tool_calls"][0]["id"] == "call_1"
+    assert second_call_messages[-1]["tool_call_id"] == "call_1"
+
+
+def test_budget_cut_tool_calls_stay_paired():
+    """预算截断时（模型一轮返回超预算 tool_calls），未执行部分不进历史，配对仍完整。"""
+    llm = MockLLM(
+        plan_content="",
+        rounds=[
+            LLMReply(
+                tool_calls=[tool_call(tc_id=f"call_{i}") for i in range(10)],  # 10 个但预算 8
+            ),
+            LLMReply(content="答案"),
+        ],
+    )
+    orchestrator = ResearchOrchestrator(
+        ToolRegistry([SearchTool()]), llm, max_tool_calls=8
+    )
+    task, collector = run_task(orchestrator)
+
+    assert task.status == TaskStatus.FAILED  # 预算耗尽
+    assert SearchTool.calls == 8
+    # 每轮 complete 收到的历史仍须协议合规
+    for messages, _ in llm.calls[1:]:
+        assert_protocol_compliant(messages)
 
 
 # ---- 工具结果截断 ----

@@ -167,14 +167,38 @@ class ResearchOrchestrator:
                 final_content = reply.content or ""
                 break
 
+            # 预算内可执行的部分（超预算的 tool_calls 不执行，也绝不能进消息历史）
+            remaining = self.max_tool_calls - tool_calls_used
+            executable = reply.tool_calls[:remaining]
+            if not executable:
+                break
+
+            # OpenAI 协议硬性要求：role=tool 消息必须紧跟在一条
+            # 带 tool_calls 的 assistant 消息之后，否则 API 400（联调踩坑）
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": json.dumps(tc.arguments, ensure_ascii=False),
+                            },
+                        }
+                        for tc in executable
+                    ],
+                }
+            )
+
             step = task.steps[min(round_index, len(task.steps) - 1)]
             round_index += 1
             step.status = StepStatus.RUNNING
             emit(make_event("step.started", step_id=step.step_id))
 
-            for tc in reply.tool_calls:
-                if tool_calls_used >= self.max_tool_calls:
-                    break
+            for tc in executable:
                 tool_calls_used += 1
                 emit(
                     make_event(
