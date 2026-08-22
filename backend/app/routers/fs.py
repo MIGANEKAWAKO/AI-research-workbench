@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from ..vault import default_vault_path
+from ..vault import VaultPathError, default_vault_path, resolve_vault_path
 
 router = APIRouter()
 
@@ -25,21 +25,12 @@ def _vault_root() -> Path:
     return default_vault_path().resolve()
 
 
-def _normalize_relative(relative: str) -> str:
-    """去掉首部斜杠与 . 段，空串表示 vault 根。"""
-    relative = (relative or "").strip().replace("\\", "/")
-    while relative.startswith("./"):
-        relative = relative[2:]
-    return relative.lstrip("/")
-
-
 def _resolve_vault_path(relative: str) -> Path:
-    """相对 vault 的路径 → 绝对路径；越界抛 403（resolve 解析真实路径防 ../ 与符号链接）。"""
-    vault = _vault_root()
-    target = (vault / _normalize_relative(relative)).resolve()
-    if not target.is_relative_to(vault):
+    """相对 vault 的路径 → 绝对路径；越界抛 403（安全逻辑统一在 vault.resolve_vault_path）。"""
+    try:
+        return resolve_vault_path(relative)
+    except VaultPathError:
         raise HTTPException(status_code=403, detail="路径越界")
-    return target
 
 
 def _require_file(target: Path) -> None:

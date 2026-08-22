@@ -20,7 +20,7 @@ from .prompts import (
     SYSTEM_PROMPT_TEMPLATE,
     TASK_PROMPTS,
 )
-from .routers import documents, export_api, fs, kb_api
+from .routers import documents, export_api, fs, kb_api, research
 
 from .rag import build_rag_context
 
@@ -42,6 +42,7 @@ app.include_router(fs.router, prefix="/api/fs")
 app.include_router(documents.router, prefix="/api/documents")
 app.include_router(kb_api.router, prefix="/api/kb")
 app.include_router(export_api.router, prefix="/api/export")
+app.include_router(research.router, prefix="/api/research")
 
 app.add_middleware(
     CORSMiddleware,
