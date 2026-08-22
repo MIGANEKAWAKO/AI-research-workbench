@@ -43,6 +43,9 @@ class ToolCallRequest:
 class LLMReply:
     content: str | None = None
     tool_calls: list[ToolCallRequest] = field(default_factory=list)
+    # 原始 assistant 消息（含 reasoning_content 等供应商专有字段），
+    # 回填消息历史时原样使用——DeepSeek thinking 模式校验必须回传 reasoning_content
+    raw_assistant: dict[str, Any] | None = None
 
 
 class LLMClient(Protocol):
@@ -88,7 +91,29 @@ class DeepSeekLLMClient:
                 tool_calls.append(
                     ToolCallRequest(id=tc.id, name=tc.function.name, arguments=arguments)
                 )
-            return LLMReply(content=message.content, tool_calls=tool_calls)
+            # 原始 assistant 消息：reasoning_content（thinking 模式）必须原样回传，
+            # 否则 DeepSeek 400（A7 验收踩坑）
+            raw_assistant: dict[str, Any] = {"role": "assistant", "content": message.content}
+            reasoning = getattr(message, "reasoning_content", None)
+            if reasoning is not None:
+                raw_assistant["reasoning_content"] = reasoning
+            if message.tool_calls:
+                raw_assistant["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in message.tool_calls
+                ]
+            return LLMReply(
+                content=message.content,
+                tool_calls=tool_calls,
+                raw_assistant=raw_assistant,
+            )
         finally:
             await client.close()
 
@@ -174,9 +199,17 @@ class ResearchOrchestrator:
                 break
 
             # OpenAI 协议硬性要求：role=tool 消息必须紧跟在一条
-            # 带 tool_calls 的 assistant 消息之后，否则 API 400（联调踩坑）
-            messages.append(
-                {
+            # 带 tool_calls 的 assistant 消息之后，否则 API 400（联调踩坑）。
+            # 优先用客户端返回的原始消息（含 reasoning_content，thinking 模式必须回传）；
+            # Mock/降级路径无原始消息时手动构造。
+            if reply.raw_assistant is not None:
+                assistant_msg = dict(reply.raw_assistant)
+                executable_ids = {tc.id for tc in executable}
+                assistant_msg["tool_calls"] = [
+                    tc for tc in assistant_msg.get("tool_calls", []) if tc["id"] in executable_ids
+                ]
+            else:
+                assistant_msg = {
                     "role": "assistant",
                     "content": None,
                     "tool_calls": [
@@ -191,7 +224,7 @@ class ResearchOrchestrator:
                         for tc in executable
                     ],
                 }
-            )
+            messages.append(assistant_msg)
 
             step = task.steps[min(round_index, len(task.steps) - 1)]
             round_index += 1
@@ -228,12 +261,19 @@ class ResearchOrchestrator:
             step.status = StepStatus.COMPLETED
             emit(make_event("step.completed", step_id=step.step_id))
 
-        # ---- 预算耗尽：结构化失败，不伪造答案 ----
+        # ---- 预算耗尽：有证据则降级汇总（不伪造、但必须给答案），无答案才失败 ----
         if not final_content:
-            task.transition(TaskStatus.FAILED)
-            task.error = f"工具调用预算耗尽（超过 {self.max_tool_calls} 次）"
-            emit(make_event("task.error", code="BUDGET_EXCEEDED", message=task.error, recoverable=True))
-            return
+            budget_message = f"工具调用预算耗尽（超过 {self.max_tool_calls} 次）"
+            emit(make_event("task.error", code="BUDGET_EXCEEDED", message=budget_message, recoverable=True))
+            if any(msg["role"] == "tool" for msg in messages):
+                # 不带 tools 强制模型基于已收集证据收尾（含"资料不足"的诚实说明）
+                degraded = await self.llm.complete(messages)
+                final_content = degraded.content or ""
+            if not final_content:
+                task.transition(TaskStatus.FAILED)
+                task.error = budget_message + "且无可用证据"
+                emit(make_event("task.error", code="BUDGET_EXCEEDED", message=task.error, recoverable=True))
+                return
 
         # ---- SYNTHESIZING：输出最终答案 ----
         task.transition(TaskStatus.SYNTHESIZING)

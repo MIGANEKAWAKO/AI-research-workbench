@@ -31,9 +31,16 @@ const ResearchTaskView = ({ state }: { state: ResearchTaskState }) => (
     </div>
 
     {state.error && (
-      <div className='mt-2 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[11.5px] text-destructive'>
+      <div
+        className={cn(
+          'mt-2 rounded-lg border px-2.5 py-1.5 text-[11.5px]',
+          state.error.recoverable
+            ? 'border-warning/30 bg-warning/10 text-warning'
+            : 'border-destructive/30 bg-destructive/10 text-destructive'
+        )}
+      >
         [{state.error.code}] {state.error.message}
-        {state.error.recoverable && '（可重新发起）'}
+        {state.error.recoverable && '（已基于现有资料降级回答）'}
       </div>
     )}
 

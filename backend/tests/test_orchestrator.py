@@ -55,17 +55,21 @@ def _reset_calls():
 
 
 class MockLLM:
-    """脚本化 LLM：第 1 次调用（规划）返回 plan_content，之后按 rounds 返回回复。"""
+    """脚本化 LLM：第 1 次调用（规划）返回 plan_content；带 tools 的调用按 rounds；
+    tools=None 的调用（预算耗尽降级汇总）返回 fallback_content。"""
 
-    def __init__(self, plan_content: str = "", rounds: list[LLMReply] | None = None):
+    def __init__(self, plan_content: str = "", rounds: list[LLMReply] | None = None, fallback_content=None):
         self.plan_content = plan_content
         self.rounds = rounds or []
+        self.fallback_content = fallback_content
         self.calls: list = []
 
     async def complete(self, messages, tools=None):
         self.calls.append((messages, tools))
         if len(self.calls) == 1:
             return LLMReply(content=self.plan_content)
+        if tools is None:
+            return LLMReply(content=self.fallback_content)
         idx = min(len(self.calls) - 2, len(self.rounds) - 1)
         return self.rounds[idx] if self.rounds else LLMReply(content="（无回复）")
 
@@ -210,18 +214,32 @@ def test_failing_tool_is_recoverable():
     assert tool_result_event["ok"] is False and tool_result_event["error"] == "超时"
 
 
-# ---- 预算耗尽 ----
+# ---- 预算耗尽：有证据降级汇总，无答案才失败 ----
 
-def test_budget_exceeded_fails_with_structured_error():
+def test_budget_exceeded_with_evidence_degrades_to_answer():
+    """验收任务暴露的真实缺陷：预算耗尽不能空手失败，应基于已收集证据降级汇总。"""
     rounds = [LLMReply(tool_calls=[tool_call(tc_id=f"call_{i}")]) for i in range(8)]
-    llm = MockLLM(plan_content="", rounds=rounds)
-    orchestrator = ResearchOrchestrator(ToolRegistry([SearchTool()]), llm)
-    task, collector = run_task(orchestrator, question="一直查下去")
+    llm = MockLLM(plan_content="", rounds=rounds, fallback_content="本地资料不足，仅能给出部分结论。")
+    task, collector = run_task(ResearchOrchestrator(ToolRegistry([SearchTool()]), llm))
+
+    assert task.status == TaskStatus.COMPLETED
+    assert task.answer == "本地资料不足，仅能给出部分结论。"
+    assert SearchTool.calls == 8
+    error_event = next(ev for ev in collector.events if ev["type"] == "task.error")
+    assert error_event["code"] == "BUDGET_EXCEEDED" and error_event["recoverable"] is True
+    # 降级汇总调用不带 tools（强制模型收尾而非继续调工具）
+    assert llm.calls[-1][1] is None
+    answer_event = next(ev for ev in collector.events if ev["type"] == "answer.delta")
+    assert answer_event["content"] == "本地资料不足，仅能给出部分结论。"
+
+
+def test_budget_exceeded_without_answer_fails():
+    rounds = [LLMReply(tool_calls=[tool_call(tc_id=f"call_{i}")]) for i in range(8)]
+    llm = MockLLM(plan_content="", rounds=rounds, fallback_content=None)  # 降级也无内容
+    task, collector = run_task(ResearchOrchestrator(ToolRegistry([SearchTool()]), llm))
 
     assert task.status == TaskStatus.FAILED
     assert "预算耗尽" in (task.error or "")
-    error_event = next(ev for ev in collector.events if ev["type"] == "task.error")
-    assert error_event["code"] == "BUDGET_EXCEEDED" and error_event["recoverable"] is True
     assert SearchTool.calls == 8
     assert collector.events[-1]["type"] == "task.completed"
 
