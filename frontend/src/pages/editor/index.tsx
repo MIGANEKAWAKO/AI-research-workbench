@@ -5,7 +5,7 @@ import { EditorContent, EditorContext, useEditor } from '@tiptap/react'
 import MainToolbarContent from './MainToolbarContent'
 import MobileToolbarContent from './MobileToolbarContent'
 import EditorHeader from '@/components/EditorHeader'
-import { Bot } from "lucide-react";
+import { Bot, Table as TableIcon } from "lucide-react";
 
 // extensions
 import { StarterKit } from '@tiptap/starter-kit'
@@ -39,6 +39,7 @@ import '@/components/tiptap-node/image-node/image-node.scss'
 import '@/components/tiptap-node/heading-node/heading-node.scss'
 import '@/components/tiptap-node/paragraph-node/paragraph-node.scss'
 import '@/components/tiptap-node/callout-node/callout-node.scss'
+import '@/components/tiptap-node/table-node/table-node.scss'
 
 // hooks
 import { useIsBreakpoint } from '@/hooks/use-is-breakpoint'
@@ -232,6 +233,22 @@ const Editor = () => {
                                     type={mobileView === 'highlighter' ? 'highlighter' : 'link'}
                                     onBack={() => setMobileView('main')}
                                 />
+                            )}
+                            {/* T3：临时表格插入按钮（T5 重构按钮组时并入） */}
+                            {!isMobile && (
+                                <button
+                                    onClick={() =>
+                                        editor
+                                            ?.chain()
+                                            .focus()
+                                            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+                                            .run()
+                                    }
+                                    title="插入表格"
+                                    className="grid size-[30px] shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                                >
+                                    <TableIcon className="size-4" />
+                                </button>
                             )}
                         </div>
                     }
