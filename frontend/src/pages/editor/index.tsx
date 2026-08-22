@@ -40,6 +40,7 @@ import '@/components/tiptap-node/heading-node/heading-node.scss'
 import '@/components/tiptap-node/paragraph-node/paragraph-node.scss'
 import '@/components/tiptap-node/callout-node/callout-node.scss'
 import '@/components/tiptap-node/table-node/table-node.scss'
+import '@/styles/editor-content.scss'
 
 // hooks
 import { useIsBreakpoint } from '@/hooks/use-is-breakpoint'
@@ -156,6 +157,23 @@ const Editor = () => {
             setMobileView('main')
         }
     }, [isMobile, mobileView])
+
+    // T4：代码块语言标签（pre::after 显示 data-lang，参考设计稿 refreshCodeLabels）
+    useEffect(() => {
+        if (!editor) return
+        const refreshCodeLabels = () => {
+            editor.view.dom.querySelectorAll('pre').forEach((pre) => {
+                const code = pre.querySelector('code')
+                const m = code && /language-([\w-]+)/.exec(code.className)
+                pre.setAttribute('data-lang', m ? m[1] : 'code')
+            })
+        }
+        refreshCodeLabels()
+        editor.on('update', refreshCodeLabels)
+        return () => {
+            editor.off('update', refreshCodeLabels)
+        }
+    }, [editor])
 
     useEffect(() => {
         activeNoteIdRef.current = activeNoteId

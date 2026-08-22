@@ -1,0 +1,218 @@
+/* 编辑器内容样式（UI 重构 T4，对齐设计稿 .ProseMirror 映射）
+   集中覆盖 tiptap 模板的视觉样式，用 shadcn 主题 token；不影响功能样式。 */
+.tiptap.ProseMirror {
+  outline: none;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted-foreground);
+
+  /* 不强制 >*{margin:0}：保持块级 margin 排版（各 node 已收紧行距），避免 flex gap 方案在 ProseMirror 的布局风险 */
+
+  /* 标题（设计稿 h1/h2/h3 字号与颜色） */
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--foreground);
+  }
+
+  h2 {
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--foreground);
+  }
+
+  h3 {
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--muted-foreground);
+  }
+
+  p {
+    color: var(--muted-foreground);
+  }
+
+  strong {
+    color: var(--foreground);
+    font-weight: 700;
+  }
+
+  em {
+    font-style: italic;
+    color: var(--foreground);
+  }
+
+  a {
+    color: var(--primary);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(47, 107, 255, 0.12);
+  }
+
+  /* 列表（设计稿：蓝点无序、蓝色序号有序；用 li::before 绝对定位更稳，避免嵌套布局风险） */
+  ul {
+    list-style: none;
+    padding-left: 1.25rem;
+    margin: 0.5em 0;
+  }
+
+  ul li {
+    position: relative;
+    padding-left: 16px;
+    margin: 0.25em 0;
+  }
+
+  ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+  }
+
+  ol {
+    list-style: none;
+    counter-reset: li;
+    padding-left: 1.25rem;
+    margin: 0.5em 0;
+  }
+
+  ol li {
+    position: relative;
+    padding-left: 16px;
+    margin: 0.25em 0;
+  }
+
+  ol li::before {
+    counter-increment: li;
+    content: counter(li) '.';
+    position: absolute;
+    left: 0;
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  /* 任务列表（设计稿：蓝色 checkbox） */
+  ul[data-type='taskList'] {
+    li {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+
+      > label {
+        margin-top: 4px;
+        user-select: none;
+      }
+
+      > div {
+        flex: 1;
+      }
+    }
+
+    input[type='checkbox'] {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--primary);
+    }
+  }
+
+  /* 引用（设计稿：左边框） */
+  blockquote {
+    border-left: 3px solid var(--border);
+    padding: 2px 0 2px 14px;
+    color: var(--muted-foreground);
+  }
+
+  /* 分割线 */
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 4px 0;
+  }
+
+  /* 行内代码（设计稿：Geist Mono + 边框 + 粉紫） */
+  code {
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-size: 12.5px;
+    background: var(--background);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 5px;
+    color: #c98fb8;
+  }
+
+  /* 图片（设计稿：圆角边框） */
+  img {
+    max-width: 100%;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+
+  /* 代码块（设计稿：macOS 三圆点 + 语言标签） */
+  pre {
+    position: relative;
+    background: #0a0b0e;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 34px 16px 14px;
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: #c8cfd8;
+    overflow-x: auto;
+    margin: 0.5em 0;
+
+    code {
+      background: none;
+      border: none;
+      padding: 0;
+      color: inherit;
+      font-size: inherit;
+    }
+  }
+
+  .dark pre {
+    background: #0a0b0e;
+  }
+
+  /* macOS 圆点（红黄绿） */
+  pre::before {
+    content: '';
+    position: absolute;
+    top: 12px;
+    left: 16px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--destructive);
+    box-shadow: 18px 0 0 var(--warning), 36px 0 0 var(--success);
+  }
+
+  /* 语言标签（data-lang → ::after） */
+  pre::after {
+    content: attr(data-lang);
+    position: absolute;
+    top: 11px;
+    right: 16px;
+    font-size: 11px;
+    color: var(--muted-foreground);
+    font-family: 'Geist Mono', ui-monospace, monospace;
+  }
+
+  /* placeholder（设计稿 is-editor-empty） */
+  p.is-editor-empty:first-child::before,
+  p.is-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: var(--muted-foreground);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+
+  /* 预览模式：只读光标 */
+  &.preview {
+    cursor: default;
+  }
+}
