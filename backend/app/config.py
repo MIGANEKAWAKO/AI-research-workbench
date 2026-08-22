@@ -25,6 +25,10 @@ class Settings:
     vault_path: str = os.getenv("VAULT_PATH", "")
     kb_dir: str = os.getenv("KB_DIR", "")
 
+    # Research Agent 联网搜索（A4）：provider 未配置时 web_search 工具降级失败，不影响本地检索
+    web_search_provider: str = os.getenv("WEB_SEARCH_PROVIDER", "")
+    web_search_timeout: float = float(os.getenv("WEB_SEARCH_TIMEOUT", "10"))
+
 
 settings = Settings()
 

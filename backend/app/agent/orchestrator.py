@@ -151,8 +151,9 @@ class ResearchOrchestrator:
 
         # ---- EXECUTING：工具循环，直到模型输出最终答案或预算耗尽 ----
         task.transition(TaskStatus.EXECUTING)
+        system_content = _scope_aware_prompt(task)
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": RESEARCHER_SYSTEM_PROMPT},
+            {"role": "system", "content": system_content},
             {"role": "user", "content": task.question},
         ]
         tools = self.registry.to_openai_tools()
@@ -215,6 +216,16 @@ class ResearchOrchestrator:
         task.answer = final_content
         emit(make_event("answer.delta", content=final_content))
         task.transition(TaskStatus.COMPLETED)
+
+
+def _scope_aware_prompt(task: ResearchTask) -> str:
+    """执行提示词 + 任务范围约束（scope 由请求传入，模型据此限定检索范围）。"""
+    content = RESEARCHER_SYSTEM_PROMPT
+    if task.scope.doc_id:
+        content += f"\n本次研究限定文献：{task.scope.doc_id}（local_kb_search 请传 doc_id）"
+    if task.scope.collection_id:
+        content += f"\n本次研究限定集合：{task.scope.collection_id}"
+    return content
 
 
 def _parse_plan(content: str) -> list[dict[str, str]]:
