@@ -1,11 +1,25 @@
 # TipTap 编辑器 UI 改造清单（依据《知微-编辑器-TipTap.html》）
 
-> 状态：待执行（主界面 UI 重构已交付，编辑器是最后一块）
+> 状态：**已完成**（T1-T7 全部落地，0.5d 估时实际分多轮，编辑 visual 与设计稿对齐）
 > 设计稿：`frontend/知微-编辑器-TipTap.html`（418 行，TipTap 2 示例 + 完整内容样式映射）
 > 原则：**最小代价**——样式层全部复用现有主题 token；只新增设计稿明确要求的功能扩展；不引入不必要的库。
 > 前置注意：开工前确认在 **frontend** 分支（CLAUDE.md 分支纪律）。
 
 ---
+
+## 〇、执行记录（2026-08 完成）
+
+- **T1** ✅ 安装 placeholder/table 系列扩展（3.22.4）+ 接线
+- **T2** ✅ Callout 节点（block + fenced `:::callout` 序列化）
+- **T3** ✅ table round-trip 验证 + 表格按钮 + 表格样式
+- **T4** ✅ 内容样式重写（editor-content.scss）+ 代码块 data-lang
+- **T5** ✅ 工具栏按钮组重构 + 编辑/预览接线 + 列表/任务列表样式修复
+- **T6** ✅ 编辑/预览接线（并入 T5）
+- **T7** ✅ 回归 build + 本文档收尾
+
+**关键更正**：tiptap-markdown 0.9 **内置 GFM 表格序列化**（源码证实），无需手写 table serializer；但 **callout 不内置**（保留自定义 `:::callout` fenced serializer）。
+
+**遗留（用户自行处理/后续）**：编辑器页头在长正文滚动时未固定（用户表示自行修复），与本次视觉改造独立。
 
 ## 一、设计稿要点（本次要新增/修改的）
 
@@ -55,9 +69,9 @@ npm install @tiptap/extension-placeholder \
 | T6 | **编辑/预览切换接线** | EditorHeader view-toggle 接 `editor.setEditable` + `.preview` class；代码块 data-lang 刷新逻辑 | 0.5d | 预览只读、光标消失、切换正常 |
 | T7 | **布局调整 + 回归** | 正文宽度按 D2；`npm run build`；T1 回归（笔记 CRUD/保存/cite 引用/图片上传/粘贴）；更新 docs | 0.5d | 全部无回归 |
 
-## 五、风险点（提前标注）
+## 五、风险点（提前标注，含实测修正）
 
-1. **tiptap-markdown 对 table 无内置支持**（已验证 dist 无 table 相关）：table 的保存/重开 round-trip 是本改造最大风险，T3 必须先做序列化验证小实验再继续；最坏情况 table 序列化为 HTML 块（丑但可用）或自定义 serializer
+1. **tiptap-markdown 对 table 的支持**：~~无内置，需手写 serializer~~ → **实测为内置支持**（`dist` 中有 `Table = core.Node.create({name:'table'})` + `inTable` 处理），GFM 表格 round-trip 无损，无需手写。**callout 仍不内置**（`callout mentions: 0`），保留自定义 fenced serializer（D4）
 2. **StarterKit v3 与设计稿 v2 差异**：设计稿 importmap 用 tiptap 2，项目是 3.22；API 兼容（Node.create/configure 相同），但 StarterKit v3 的默认配置不同（如 link 已内置），接线时以 v3 实际行为为准
 3. **现有模板 scss 冲突**：`_variables.scss` 定义 --tt-* 模板变量，重写内容样式时注意别误删编辑器功能所需样式（如 .ProseMirror 基础 reset）
 4. **cite 节点（F6 引用系统）必须保留**：内容样式重写时保留 cite-node.scss 的关键样式，避免引用徽章样式回归
