@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { List, MoreHorizontal, PenLine, Star } from 'lucide-react'
 import { toast } from 'sonner'
+import { useCurrentEditor } from '@tiptap/react'
 import {
     Dialog,
     DialogContent,
@@ -38,10 +39,19 @@ const EditorHeader = ({ toolbar }: { toolbar?: React.ReactNode }) => {
     const activeNoteId = useNoteStore((s) => s.activeNoteId)
     const notes = useDataStore((s) => s.notes)
     const collections = useDataStore((s) => s.collections)
+    const { editor } = useCurrentEditor()
 
     const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit')
     const [renameOpen, setRenameOpen] = useState(false)
     const [renameValue, setRenameValue] = useState('')
+
+    // T5：编辑/预览切换（设计稿 view-toggle，真实 setEditable）
+    const switchView = (mode: 'edit' | 'preview') => {
+        setViewMode(mode)
+        if (!editor) return
+        editor.setEditable(mode === 'edit')
+        editor.view.dom.classList.toggle('preview', mode === 'preview')
+    }
 
     const note = useMemo(
         () => notes.find((n) => n.id === activeNoteId) ?? null,
@@ -117,7 +127,7 @@ const EditorHeader = ({ toolbar }: { toolbar?: React.ReactNode }) => {
                 <div className="shrink-0">
                     <div className="flex rounded-lg bg-background p-[3px]">
                         <button
-                            onClick={() => setViewMode('edit')}
+                            onClick={() => switchView('edit')}
                             className={cn(
                                 'rounded-md px-3 py-[5px] text-xs transition-colors',
                                 viewMode === 'edit'
@@ -128,10 +138,7 @@ const EditorHeader = ({ toolbar }: { toolbar?: React.ReactNode }) => {
                             编辑
                         </button>
                         <button
-                            onClick={() => {
-                                setViewMode('preview')
-                                toast.info('预览功能开发中，敬请期待')
-                            }}
+                            onClick={() => switchView('preview')}
                             className={cn(
                                 'rounded-md px-3 py-[5px] text-xs transition-colors',
                                 viewMode === 'preview'

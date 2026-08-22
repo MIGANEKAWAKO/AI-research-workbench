@@ -48,20 +48,20 @@
     border-bottom: 1px solid rgba(47, 107, 255, 0.12);
   }
 
-  /* 列表（设计稿：蓝点无序、蓝色序号有序；用 li::before 绝对定位更稳，避免嵌套布局风险） */
-  ul {
+  /* 列表（设计稿：蓝点无序、蓝色序号有序；仅作用于普通列表，taskList 走模板样式） */
+  ul:not([data-type='taskList']) {
     list-style: none;
     padding-left: 1.25rem;
     margin: 0.5em 0;
   }
 
-  ul li {
+  ul:not([data-type='taskList']) li {
     position: relative;
     padding-left: 16px;
     margin: 0.25em 0;
   }
 
-  ul li::before {
+  ul:not([data-type='taskList']) li::before {
     content: '';
     position: absolute;
     left: 0;
@@ -94,28 +94,34 @@
     font-weight: 600;
   }
 
-  /* 任务列表（设计稿：蓝色 checkbox） */
+  /* 任务列表（模板自带自定义 checkbox，仅去多余的圆点/间距并对齐） */
   ul[data-type='taskList'] {
-    li {
-      display: flex;
-      gap: 10px;
-      align-items: flex-start;
+    list-style: none;
+    padding-left: 0.25rem;
+    margin: 0.5em 0;
+  }
 
-      > label {
-        margin-top: 4px;
-        user-select: none;
-      }
+  ul[data-type='taskList'] li {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    position: static;
+    padding-left: 0;
+    margin: 0.25em 0;
+  }
 
-      > div {
-        flex: 1;
-      }
-    }
+  ul[data-type='taskList'] li::before {
+    content: none;
+  }
 
-    input[type='checkbox'] {
-      width: 15px;
-      height: 15px;
-      accent-color: var(--primary);
-    }
+  ul[data-type='taskList'] li > label {
+    padding-right: 0;
+    padding-top: 0; /* 覆盖模板 label padding-top 0.375rem(6px) */
+    margin-top: 3px; /* 设计稿：让 checkbox 与文本第一行对齐 */
+  }
+
+  ul[data-type='taskList'] li > div {
+    flex: 1;
   }
 
   /* 引用（设计稿：左边框） */
