@@ -60,9 +60,13 @@ const AIPanel = () => {
     const inputRef = useRef<HTMLTextAreaElement>(null)
 
     // M2 C3：会话数据源——消息按当前会话渲染；发送/回答/研究答案乐观追加到当前会话
+    // 注意：selector 只返回 store 内的稳定引用（数组或 undefined），空数组兜底放组件层——
+    // 若在 selector 里 ?? []，activeId 无效时会话缓存为空时每次返回新数组，
+    // useSyncExternalStore 认为快照恒变 → 无限循环白屏（React 19 报 getSnapshot 未缓存）。
     const conversations = useConversationStore((s) => s.conversations)
     const activeConvId = useConversationStore((s) => s.activeId)
-    const messages = useConversationStore((s) => s.messagesByConv[s.activeId ?? ''] ?? [])
+    const rawMessages = useConversationStore((s) => s.messagesByConv[s.activeId ?? ''])
+    const messages = rawMessages ?? []
     const loadConversations = useConversationStore((s) => s.load)
     const selectConversation = useConversationStore((s) => s.select)
     const createConversation = useConversationStore((s) => s.create)
