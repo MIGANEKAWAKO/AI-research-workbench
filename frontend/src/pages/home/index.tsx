@@ -14,7 +14,7 @@ import { useLiteratureStore } from "@/store/useLiteratureStore";
 import { LiteratureDetail } from "@/components/Literature/literature-detail";
 import { PdfReader } from "@/components/Reader/pdf-reader";
 import { UploadView } from "@/components/Literature/upload-view";
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 const Home = () => {
     const isAiPanelOpen = useNoteStore((state) => state.isAiPanelOpen);
@@ -39,15 +39,60 @@ const Home = () => {
         }
     }, [view])
 
-    // F3：30s 轻量轮询兜底——感知 Obsidian/VS Code 等外部对 vault 文件的修改。
-    // 传入 activeNoteId：正在编辑的笔记保留内存值（refreshFromDisk 内部跳过），
-    // 防止未保存输入被磁盘旧版覆盖。activeNoteId 变化时重建定时器（无副作用）。
+    // F3 演进（M2 A5）：vault 变更感知——SSE 订阅为主（后端 watchdog 实时推送，
+    // GET /api/events），EventSource 断线/不可用时降级 30s 轮询兜底；重连成功即停轮询。
+    // 事件是"幂等刷新信号"（vault.changed 无 diff）：收到即全量刷新笔记 + 文献列表，
+    // 丢失/重复无害（后端设计见 docs/模块说明.md A5）。
+    // 传 activeNoteId：正在编辑的笔记保留内存值（refreshFromDisk 内部跳过），
+    // 防止未保存输入被磁盘旧版覆盖；用 ref 读最新值，避免连接因 activeNoteId 变化重建。
+    const activeNoteIdRef = useRef(activeNoteId)
+    activeNoteIdRef.current = activeNoteId
+
     useEffect(() => {
-        const timer = setInterval(() => {
-            useDataStore.getState().refreshFromDisk(activeNoteId)
-        }, 30_000)
-        return () => clearInterval(timer)
-    }, [activeNoteId])
+        let es: EventSource | null = null
+        let pollTimer: ReturnType<typeof setInterval> | null = null
+        let sseOk = false
+
+        const refreshAll = () => {
+            useDataStore.getState().refreshFromDisk(activeNoteIdRef.current)
+            void useLiteratureStore.getState().load()
+        }
+        const stopPoll = () => {
+            if (pollTimer) {
+                clearInterval(pollTimer)
+                pollTimer = null
+            }
+        }
+        const startPoll = () => {
+            if (pollTimer) return
+            pollTimer = setInterval(refreshAll, 30_000)
+        }
+
+        es = new EventSource('http://localhost:3001/api/events')
+        es.onopen = () => {
+            sseOk = true
+            stopPoll()
+        }
+        // 断线/重连中（EventSource 内置自动重连）→ 轮询兜底
+        es.onerror = () => {
+            sseOk = false
+            startPoll()
+        }
+        es.onmessage = (e) => {
+            if (!sseOk) return
+            try {
+                const data = JSON.parse(e.data) as { type?: string }
+                if (data.type === 'vault.changed') refreshAll()
+            } catch {
+                // 非 JSON 帧忽略（心跳是注释帧，不会触发 onmessage，此处仅防御）
+            }
+        }
+
+        return () => {
+            es?.close()
+            stopPoll()
+        }
+    }, [])
 
     return (
         <>
