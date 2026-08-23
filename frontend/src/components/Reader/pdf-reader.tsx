@@ -3,6 +3,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { ArrowLeft, Bot, ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut } from 'lucide-react'
 import { loadPdfDocument } from '@/services/pdf'
 import { useLiteratureStore } from '@/store/useLiteratureStore'
+import { useAnnotationStore } from '@/store/useAnnotationStore'
 import { useNoteStore, type AiAskType } from '@/store/useNoteStore'
 import { PdfPage, type TextSelection } from './pdf-page'
 import { SelectionToolbar } from './selection-toolbar'
@@ -23,6 +24,15 @@ export function PdfReader() {
     const prefillAiTask = useNoteStore((s) => s.prefillAiTask)
     const toggleAiPanel = useNoteStore((s) => s.toggleAiPanel)
     const isAiPanelOpen = useNoteStore((s) => s.isAiPanelOpen)
+
+    // M2 A1：高亮批注数据源（进入阅读器时 load 一次全量，store 内部去重）
+    const annotations = useAnnotationStore((s) => s.annotations)
+    const loadAnnotations = useAnnotationStore((s) => s.load)
+    const addAnnotation = useAnnotationStore((s) => s.add)
+
+    useEffect(() => {
+        void loadAnnotations()
+    }, [loadAnnotations])
 
     const entry = useMemo(
         () => entries.find((e) => e.id === readerId) ?? null,
@@ -78,6 +88,17 @@ export function PdfReader() {
 
     const clearSelection = useCallback(() => setSelection(null), [])
 
+    // M2 A1：当前页高亮（docId + pageNumber 过滤；渲染注入见 PdfPage）
+    const pageAnnotations = useMemo(
+        () =>
+            entry
+                ? annotations.filter(
+                      (a) => a.docId === entry.id && a.pageNumber === pageNumber
+                  )
+                : [],
+        [annotations, entry, pageNumber]
+    )
+
     // 翻页/缩放统一走这里：夹边界 + 清空划词浮层
     const goTo = useCallback(
         (n: number) => {
@@ -119,6 +140,19 @@ export function PdfReader() {
     const handleCite = useCallback(() => {
         setCiteOpen(true)
     }, [])
+
+    // M2 A1：划词 → 固化为高亮（锚定段为空 = 文本层未就绪，不落空数据）
+    const handleHighlight = useCallback(() => {
+        if (!selection || !entry) return
+        if (selection.segments.length === 0) return
+        addAnnotation({
+            docId: entry.id,
+            pageNumber: selection.pageNumber,
+            segments: selection.segments,
+            note: '',
+        })
+        clearSelection()
+    }, [selection, entry, addAnnotation, clearSelection])
 
     const handleCiteClose = useCallback(() => {
         setCiteOpen(false)
@@ -242,6 +276,7 @@ export function PdfReader() {
                             pageNumber={pageNumber}
                             scale={scale}
                             onTextSelect={setSelection}
+                            annotations={pageAnnotations}
                         />
                     )}
                 </div>
@@ -254,6 +289,7 @@ export function PdfReader() {
                     onCopy={handleCopy}
                     onCite={handleCite}
                     onAskAi={handleAskAi}
+                    onHighlight={handleHighlight}
                 />
             )}
 

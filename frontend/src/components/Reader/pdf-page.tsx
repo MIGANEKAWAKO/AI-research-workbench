@@ -1,6 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { TextLayer } from 'pdfjs-dist'
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
+import { applyHighlightsToPage, selectionToSegments } from '@/lib/pdf-annotations'
+import type { AnnotationSegment, PdfAnnotation } from '@/types'
 import './reader.scss'
 
 /** 划词选中的文本 + 页码 + 选区屏幕坐标（getBoundingClientRect，供浮层 fixed 定位） */
@@ -8,6 +10,8 @@ export interface TextSelection {
     text: string
     pageNumber: number
     rect: { top: number; left: number; right: number; bottom: number }
+    /** M2 A1：选区锚定段（文本层未就绪时为 []，调用方据此决定是否可高亮） */
+    segments: AnnotationSegment[]
 }
 
 interface PdfPageProps {
@@ -15,6 +19,10 @@ interface PdfPageProps {
     pageNumber: number
     scale: number
     onTextSelect: (selection: TextSelection | null) => void
+    /** M2 A1：当前页高亮批注（docId + pageNumber 已过滤），textLayer 渲染完成后注入 */
+    annotations?: PdfAnnotation[]
+    /** M2 A1：点击高亮 mark → 打开批注浮层（rect 为 mark 屏幕坐标，供浮层定位） */
+    onAnnotationClick?: (annId: string, rect: DOMRect) => void
 }
 
 /**
@@ -26,14 +34,35 @@ interface PdfPageProps {
  * - 高清屏适配：canvas 物理像素 = CSS 尺寸 × devicePixelRatio，否则 Retina 下文字发虚。
  * - 竞态保护：翻页/缩放会触发 effect 重跑，用 cancelled 标记丢弃过期异步结果
  *   （快速连翻页时旧页渲染可能晚于新页返回，不丢弃会页面错乱）。
+ * - 高亮注入（M2 A1）：textLayer 渲染完成后按锚点把 mark 包进文本 span；
+ *   annotations 变化时只重注入（解包+切包），不重建 textLayer（避免闪烁）。
+ *   ref 模式避免渲染 effect 的闭包读到过期 annotations。
  */
-export function PdfPage({ pdf, pageNumber, scale, onTextSelect }: PdfPageProps) {
+export function PdfPage({
+    pdf,
+    pageNumber,
+    scale,
+    onTextSelect,
+    annotations,
+    onAnnotationClick,
+}: PdfPageProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
-    const textLayerRef = useRef<HTMLDivElement>(null)
+    const textLayerDivRef = useRef<HTMLDivElement>(null)
+    const textLayerRef = useRef<TextLayer | null>(null)
+
+    // 渲染 effect 里注入高亮时读 ref：翻页重渲染用的是最新高亮数据，不依赖 effect 依赖数组
+    const annotationsRef = useRef<PdfAnnotation[]>([])
+    annotationsRef.current = annotations ?? []
+    const onAnnotationClickRef = useRef(onAnnotationClick)
+    onAnnotationClickRef.current = onAnnotationClick
+
+    const handleMarkClick = useCallback((annId: string, rect: DOMRect) => {
+        onAnnotationClickRef.current?.(annId, rect)
+    }, [])
 
     useEffect(() => {
         const canvas = canvasRef.current
-        const textLayerDiv = textLayerRef.current
+        const textLayerDiv = textLayerDivRef.current
         if (!canvas || !textLayerDiv) return
 
         let cancelled = false
@@ -77,6 +106,11 @@ export function PdfPage({ pdf, pageNumber, scale, onTextSelect }: PdfPageProps) 
                     viewport,
                 })
                 await textLayer.render()
+                if (cancelled) return
+
+                textLayerRef.current = textLayer
+                // M2 A1：文本层就绪后注入高亮（读 ref 拿最新数据）
+                applyHighlightsToPage(textLayerDiv, textLayer, annotationsRef.current, handleMarkClick)
             } catch (e) {
                 if (!cancelled) console.error('页面渲染失败:', e)
             }
@@ -88,11 +122,21 @@ export function PdfPage({ pdf, pageNumber, scale, onTextSelect }: PdfPageProps) 
             cancelled = true
             renderTask?.cancel()
             textLayer?.cancel()
+            textLayerRef.current = null
         }
-    }, [pdf, pageNumber, scale])
+    }, [pdf, pageNumber, scale, handleMarkClick])
+
+    // M2 A1：高亮数据变化 → 只重注入 mark（textLayer 未就绪时跳过，渲染 effect 会兜底）
+    useEffect(() => {
+        const div = textLayerDivRef.current
+        const tl = textLayerRef.current
+        if (!div || !tl) return
+        applyHighlightsToPage(div, tl, annotations ?? [], handleMarkClick)
+    }, [annotations, handleMarkClick])
 
     // 划词：mouseup 时读 getSelection()。注意必须此刻就把文本/坐标存进 state——
     // 点击浮层按钮会清空浏览器选区，按钮回调里再读实时 selection 就为空了。
+    // M2 A1：同时提取选区锚定段（文本层就绪时），供「高亮」按钮落盘。
     const handleMouseUp = () => {
         const selection = window.getSelection()
         if (!selection || selection.isCollapsed) {
@@ -107,6 +151,9 @@ export function PdfPage({ pdf, pageNumber, scale, onTextSelect }: PdfPageProps) 
         }
         const range = selection.getRangeAt(0)
         const rect = range.getBoundingClientRect()
+        const segments = textLayerRef.current
+            ? selectionToSegments(textLayerRef.current, range)
+            : []
         onTextSelect({
             text,
             pageNumber,
@@ -116,6 +163,7 @@ export function PdfPage({ pdf, pageNumber, scale, onTextSelect }: PdfPageProps) 
                 right: rect.right,
                 bottom: rect.bottom,
             },
+            segments,
         })
     }
 
@@ -123,7 +171,7 @@ export function PdfPage({ pdf, pageNumber, scale, onTextSelect }: PdfPageProps) 
         <div className="relative shadow-md ring-1 ring-black/5">
             <canvas ref={canvasRef} className="block" />
             <div
-                ref={textLayerRef}
+                ref={textLayerDivRef}
                 className="pdf-text-layer"
                 onMouseUp={handleMouseUp}
             />

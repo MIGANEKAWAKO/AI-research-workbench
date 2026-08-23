@@ -24,4 +24,16 @@
     ::selection {
         background: rgba(99, 102, 241, 0.35);
     }
+
+    // M2 A1：高亮 mark（包在文本 span 内，inline 背景随文档流定位）
+    .pdf-annotation-highlight {
+        background-color: rgba(250, 204, 21, 0.45);
+        border-radius: 2px;
+        cursor: pointer;
+        color: transparent;
+
+        &:hover {
+            background-color: rgba(250, 204, 21, 0.6);
+        }
+    }
 }
