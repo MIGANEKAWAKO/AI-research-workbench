@@ -17,6 +17,33 @@ export interface Collection {
     createdAt: number
 }
 
+// ── M2 A1：PDF 高亮批注（数据落在 vault 的 .kb/annotations.json，经 /api/fs 原子读写）──
+
+/**
+ * 高亮锚定段：不存坐标快照（缩放/翻页即失效），存文本锚点——
+ * itemIndex = pdf.js TextLayer.textDivs 数组索引（v6 中每个有文本的 textContent item
+ * 渲染为一个 span，textDivs 与 item 严格按序一一对应）；charStart/charEnd 为相对
+ * 该 span 文本节点的字符偏移。重建高亮时按锚点重新定位，与 scale 无关。
+ */
+export interface AnnotationSegment {
+    itemIndex: number
+    charStart: number
+    charEnd: number
+    /** 冗余保存被高亮的原文（批注浮层展示用，不参与定位） */
+    text: string
+}
+
+/** 一次划选 = 一条批注；跨多行/多文本 item 时拆为多个 segment */
+export interface PdfAnnotation {
+    id: string
+    docId: string // 文献 id（LiteratureEntry.id）
+    pageNumber: number
+    segments: AnnotationSegment[]
+    note: string // 批注文本，可为空（纯高亮）
+    createdAt: number
+    updatedAt: number
+}
+
 // 文献元数据（对齐后端 B5 LiteratureEntry，见 docs/后端接口文档.md）
 export interface LiteratureEntry {
     id: string          // 12 位 hex，后端生成（uuid 前缀）
