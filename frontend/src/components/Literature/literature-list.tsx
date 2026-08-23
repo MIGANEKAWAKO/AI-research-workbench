@@ -145,6 +145,23 @@ export const LiteratureList = () => {
                                                 activeId === entry.id ? 'opacity-100' : 'opacity-0'
                                             )}
                                         />
+                                        {/* M2 A3：阅读状态点（灰=未读 蓝=在读 绿=已读），title 带进度 */}
+                                        <span
+                                            className={cn(
+                                                'size-1.5 shrink-0 rounded-full',
+                                                entry.status === '已读'
+                                                    ? 'bg-success'
+                                                    : entry.status === '在读'
+                                                      ? 'bg-primary'
+                                                      : 'bg-muted-foreground/40'
+                                            )}
+                                            title={
+                                                entry.status +
+                                                (entry.lastPage && entry.lastPage > 0
+                                                    ? ` · 已读至第 ${entry.lastPage} 页`
+                                                    : '')
+                                            }
+                                        />
                                         <span className="min-w-0 flex-1 truncate">{entry.title || '未命名文献'}</span>
                                         {/* hover 删除（设计稿 row-actions del） */}
                                         <button

@@ -53,3 +53,21 @@ export const deleteLiterature = async (id: string): Promise<void> => {
         method: 'DELETE',
     })
 }
+
+/**
+ * M2 A3：更新阅读进度（状态 / 页码，至少一项；后端幂等——未变不写盘）。
+ * 返回更新后的完整条目（前端用它原地更新 entries，保持列表排序）。
+ */
+export const updateLiteratureProgress = async (
+    id: string,
+    patch: { status?: string; lastPage?: number }
+): Promise<LiteratureEntry> => {
+    return request<LiteratureEntry>(
+        `${BASE_URL}/api/documents/${id}/progress`,
+        {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patch),
+        }
+    )
+}

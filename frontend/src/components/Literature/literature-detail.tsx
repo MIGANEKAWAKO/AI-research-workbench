@@ -27,6 +27,9 @@ const MetaCell = ({ label, value }: { label: string; value: string }) => (
     </div>
 )
 
+// M2 A3：阅读状态循环（chip 点击切换：未读 → 在读 → 已读 → 未读）
+const STATUS_CYCLE = ['未读', '在读', '已读'] as const
+
 /**
  * 文献详情（F4 + UI 重构 Step 5，对齐设计稿 lit-detail）：
  * 页头（状态 chip + meta + 收藏/更多占位 + 大标题）→ divider → meta-row 三格卡片
@@ -40,6 +43,7 @@ export const LiteratureDetail = () => {
     const remove = useLiteratureStore((s) => s.remove)
     const openReader = useLiteratureStore((s) => s.openReader)
     const openUpload = useLiteratureStore((s) => s.openUpload)
+    const updateProgress = useLiteratureStore((s) => s.updateProgress)
     const notes = useDataStore((s) => s.notes)
 
     const [deleteOpen, setDeleteOpen] = useState(false)
@@ -82,6 +86,13 @@ export const LiteratureDetail = () => {
         }
     }
 
+    // M2 A3：chip 点击循环切换阅读状态（未读 → 在读 → 已读 → 未读）
+    const handleCycleStatus = () => {
+        const idx = STATUS_CYCLE.indexOf(entry.status as (typeof STATUS_CYCLE)[number])
+        const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length]
+        void updateProgress(entry.id, { status: next })
+    }
+
     // 状态 chip 配色（设计稿 chip：圆角胶囊 + 边框）
     const statusChipClass =
         entry.status === '已读'
@@ -103,14 +114,24 @@ export const LiteratureDetail = () => {
             {/* 页头（设计稿 editor-header） */}
             <div className="flex flex-col gap-3 px-7 pt-5 pb-4">
                 <div className="flex items-center gap-3">
-                    <span
+                    {/* M2 A3：状态 chip 可点击切换（title 提示） */}
+                    <button
+                        onClick={handleCycleStatus}
+                        title={`点击切换阅读状态（当前：${entry.status}）`}
                         className={cn(
-                            'inline-flex h-[26px] items-center rounded-full border px-2.5 text-xs font-medium',
+                            'inline-flex h-[26px] cursor-pointer items-center rounded-full border px-2.5 text-xs font-medium transition-colors hover:brightness-95',
                             statusChipClass
                         )}
                     >
                         {entry.status}
-                    </span>
+                    </button>
+
+                    {/* M2 A3：阅读进度（lastPage > 0 时展示） */}
+                    {entry.lastPage && entry.lastPage > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                            已读至第 {entry.lastPage} 页
+                        </span>
+                    )}
 
                     <div className="ml-auto flex items-center gap-3">
                         <span className="text-xs text-muted-foreground">

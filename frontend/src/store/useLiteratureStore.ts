@@ -1,6 +1,11 @@
 import { create } from 'zustand'
 import type { LiteratureEntry } from '@/types'
-import { listLiterature, importLiterature, deleteLiterature } from '@/services/literature'
+import {
+    listLiterature,
+    importLiterature,
+    deleteLiterature,
+    updateLiteratureProgress,
+} from '@/services/literature'
 import { useAnnotationStore } from '@/store/useAnnotationStore'
 
 /**
@@ -21,6 +26,8 @@ interface LiteratureState {
     load: () => Promise<void>
     importFile: (file: File, doi?: string, arxivId?: string) => Promise<LiteratureEntry | null>
     remove: (id: string) => Promise<void>
+    /** M2 A3：更新阅读进度（状态/页码），成功后原地更新 entries（保持排序） */
+    updateProgress: (id: string, patch: { status?: string; lastPage?: number }) => Promise<void>
     setActive: (id: string | null) => void
     openReader: (id: string) => void
     closeReader: () => void
@@ -79,6 +86,19 @@ export const useLiteratureStore = create<LiteratureState>((set) => ({
             useAnnotationStore.getState().removeByDocId(id)
         } catch (e) {
             set({ error: e instanceof Error ? e.message : '删除失败' })
+        }
+    },
+
+    updateProgress: async (id, patch) => {
+        set({ error: null })
+        try {
+            const updated = await updateLiteratureProgress(id, patch)
+            // 原地更新（保持列表导入时间排序），后端幂等返回最新条目
+            set((state) => ({
+                entries: state.entries.map((e) => (e.id === id ? updated : e)),
+            }))
+        } catch (e) {
+            set({ error: e instanceof Error ? e.message : '更新进度失败' })
         }
     },
 

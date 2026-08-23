@@ -61,4 +61,8 @@ export interface LiteratureEntry {
     collectionIds: string[]
     tags: string[]
     importedAt: string
+    /** M2 A3：阅读进度——最后阅读页码（0 = 未开始；后端进度 API 持久化） */
+    lastPage?: number
+    /** M2 A3：最近一次进度更新时间（ISO 字符串，后端写入） */
+    progressAt?: string
 }

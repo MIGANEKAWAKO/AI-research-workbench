@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { ArrowLeft, Bot, ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut } from 'lucide-react'
 import { loadPdfDocument } from '@/services/pdf'
@@ -14,6 +14,8 @@ import { CitePicker } from './cite-picker'
 const MIN_SCALE = 0.5
 const MAX_SCALE = 3
 const SCALE_STEP = 0.25
+/** M2 A3：翻页进度上报防抖（连续翻页合并为一次写，后端幂等） */
+const PROGRESS_DEBOUNCE_MS = 2000
 
 /**
  * PDF 阅读器（F5）主组件：加载 + 工具栏（翻页/缩放/页码）+ 划词浮层编排。
@@ -33,6 +35,8 @@ export function PdfReader() {
     const addAnnotation = useAnnotationStore((s) => s.add)
     const updateNote = useAnnotationStore((s) => s.updateNote)
     const removeAnnotation = useAnnotationStore((s) => s.remove)
+    // M2 A3：阅读进度（状态/页码持久化，后端 API 幂等）
+    const updateProgress = useLiteratureStore((s) => s.updateProgress)
 
     useEffect(() => {
         void loadAnnotations()
@@ -48,6 +52,10 @@ export function PdfReader() {
     const [error, setError] = useState<string | null>(null)
     const [pageNumber, setPageNumber] = useState(1)
     const [totalPages, setTotalPages] = useState(0)
+    // M2 A3：防抖上报用 ref 读最新页码/文献（cleanup flush 时闭包不 stale）
+    const pageNumberRef = useRef(1)
+    pageNumberRef.current = pageNumber
+    const progressTimerRef = useRef<number | null>(null)
     const [scale, setScale] = useState(1)
     const [selection, setSelection] = useState<TextSelection | null>(null)
     const [citeOpen, setCiteOpen] = useState(false)
@@ -65,14 +73,22 @@ export function PdfReader() {
         let cancelled = false
         let doc: PDFDocumentProxy | null = null
 
+        // M2 A3：恢复上次阅读页码（加载完成后按实际总页数 clamp）
+        const initialPage = entry.lastPage && entry.lastPage > 0 ? entry.lastPage : 1
+
         setLoading(true)
         setError(null)
-        setPageNumber(1)
+        setPageNumber(initialPage)
         setTotalPages(0)
         setSelection(null)
         setCiteOpen(false)
         setPopup(null)
         setTranslatePopup(null)
+
+        // M2 A3：打开文献 → 自动标记「在读」（已读是终态标记，不降级）
+        if (entry.status !== '已读') {
+            void updateProgress(entry.id, { status: '在读' })
+        }
 
         loadPdfDocument(entry.pdfPath)
             .then((d) => {
@@ -83,7 +99,7 @@ export function PdfReader() {
                 doc = d
                 setPdf(d)
                 setTotalPages(d.numPages)
-                setPageNumber(1)
+                setPageNumber(Math.max(1, Math.min(d.numPages, initialPage)))
             })
             .catch((e) => {
                 if (!cancelled) setError(e instanceof Error ? e.message : 'PDF 加载失败')
@@ -96,10 +112,26 @@ export function PdfReader() {
             cancelled = true
             if (doc) void doc.cleanup()
             setPdf(null)
+            // M2 A3：flush 挂起的页码上报（切文献/关闭阅读器前落盘最后一次翻页）
+            if (progressTimerRef.current !== null) {
+                window.clearTimeout(progressTimerRef.current)
+                progressTimerRef.current = null
+                void updateProgress(entry.id, { lastPage: pageNumberRef.current })
+            }
         }
     }, [entry?.id])
 
     const clearSelection = useCallback(() => setSelection(null), [])
+
+    // M2 A3：翻页进度上报（防抖合并；timer 到期读 ref 拿最新页码）
+    const reportProgressDebounced = useCallback(() => {
+        if (!entry) return
+        if (progressTimerRef.current !== null) window.clearTimeout(progressTimerRef.current)
+        progressTimerRef.current = window.setTimeout(() => {
+            progressTimerRef.current = null
+            void updateProgress(entry.id, { lastPage: pageNumberRef.current })
+        }, PROGRESS_DEBOUNCE_MS)
+    }, [entry, updateProgress])
 
     // M2 A1：当前页高亮（docId + pageNumber 过滤；渲染注入见 PdfPage）
     const pageAnnotations = useMemo(
@@ -112,13 +144,14 @@ export function PdfReader() {
         [annotations, entry, pageNumber]
     )
 
-    // 翻页/缩放统一走这里：夹边界 + 清空划词浮层
+    // 翻页/缩放统一走这里：夹边界 + 清空划词浮层 + M2 A3 上报页码
     const goTo = useCallback(
         (n: number) => {
             setPageNumber(Math.max(1, Math.min(totalPages || 1, n)))
             clearSelection()
+            reportProgressDebounced()
         },
-        [totalPages, clearSelection]
+        [totalPages, clearSelection, reportProgressDebounced]
     )
 
     const zoom = useCallback(
