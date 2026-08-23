@@ -1,9 +1,17 @@
 import { useNoteStore } from '@/store/useNoteStore'
 import { useLiteratureStore } from '@/store/useLiteratureStore'
 import { useDataStore } from '@/store/useDataStore'
+import { useConversationStore } from '@/store/useConversationStore'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronRight, Globe, Send, ShieldCheck } from 'lucide-react'
+import { ChevronDown, ChevronRight, Globe, MessageSquare, Plus, Send, ShieldCheck, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { fetchAiResponse, type AiTaskType } from '@/services/ai'
 import { ASK_INSTRUCTIONS } from '@/lib/ai-instructions'
@@ -14,8 +22,10 @@ import { cn } from '@/lib/utils'
 
 type Message = {
     id: string
-    role: 'user' | 'ai'
+    // M2 C3：role 对齐后端持久形态（user/assistant），渲染层统一判断
+    role: 'user' | 'assistant'
     content: string
+    createdAt: string
 }
 
 const AI_TASKS: { type: AiTaskType; label: string }[] = [
@@ -40,7 +50,6 @@ const AIPanel = () => {
     const [input, setInput] = useState('')
     // F7：null = 对话问答模式（RAG）；选中任务按钮 = 任务模式（处理文本）
     const [selectedTaskType, setSelectedTaskType] = useState<AiTaskType | null>(null)
-    const [messages, setMessages] = useState<Message[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [typingMessageId, setTypingMessageId] = useState<string | null>(null)
     const messageIdRef = useRef(0)
@@ -49,6 +58,28 @@ const AIPanel = () => {
     const typewriterQueueRef = useRef<string[]>([])
     const typewriterTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const inputRef = useRef<HTMLTextAreaElement>(null)
+
+    // M2 C3：会话数据源——消息按当前会话渲染；发送/回答/研究答案乐观追加到当前会话
+    const conversations = useConversationStore((s) => s.conversations)
+    const activeConvId = useConversationStore((s) => s.activeId)
+    const messages = useConversationStore((s) => s.messagesByConv[s.activeId ?? ''] ?? [])
+    const loadConversations = useConversationStore((s) => s.load)
+    const selectConversation = useConversationStore((s) => s.select)
+    const createConversation = useConversationStore((s) => s.create)
+    const removeConversation = useConversationStore((s) => s.remove)
+    const appendMessage = useConversationStore((s) => s.appendMessage)
+    const appendAiContent = useConversationStore((s) => s.appendAiContent)
+
+    // M2 C3：面板打开时确保有可用会话（首次拉取列表；无会话则自动新建）
+    useEffect(() => {
+        if (!isAiPanelOpen) return
+        void (async () => {
+            await loadConversations()
+            if (!useConversationStore.getState().activeId) {
+                await useConversationStore.getState().create()
+            }
+        })()
+    }, [isAiPanelOpen, loadConversations])
 
     // A6：研究任务模式（与任务模式互斥；过程进 ResearchTaskView，答案进消息流）
     const [researchMode, setResearchMode] = useState(false)
@@ -66,13 +97,8 @@ const AIPanel = () => {
             id: `${role}-${messageIdRef.current}`,
             role,
             content,
+            createdAt: new Date().toISOString(),
         }
-    }, [])
-
-    const appendAiContent = useCallback((messageId: string, content: string) => {
-        setMessages((prev) =>
-            prev.map((msg) => (msg.id === messageId ? { ...msg, content: msg.content + content } : msg))
-        )
     }, [])
 
     const stopTypewriter = useCallback(() => {
@@ -99,7 +125,8 @@ const AIPanel = () => {
                 return
             }
 
-            appendAiContent(messageId, nextChar)
+            // M2 C3：打字机追加写入当前会话（发送后 activeId 不变；切会话会先停打字机）
+            appendAiContent(useConversationStore.getState().activeId ?? '', messageId, nextChar)
         }, TYPEWRITER_INTERVAL_MS)
     }, [appendAiContent, stopTypewriter])
 
@@ -121,17 +148,18 @@ const AIPanel = () => {
      * F7：发送一条消息。
      * taskType 有值 → 任务模式（后端处理 text）；为空 → 对话模式（B7 RAG，
      * docId = 正在阅读的文献 id 时单篇限定，否则全局）。
+     * M2 C3：消息乐观追加到当前会话；请求带 conversation_id（历史注入 + 落库）。
      */
     const sendMessage = useCallback(
         async (content: string, taskType?: AiTaskType) => {
             const question = content.trim()
-            if (!question || isLoading) return
+            const convId = useConversationStore.getState().activeId
+            if (!question || isLoading || !convId) return
 
             const userMsg = createMessage('user', question)
-            const aiPlaceholder = createMessage('ai', '')
-            const nextMessages = [...messages, userMsg, aiPlaceholder]
-
-            setMessages(nextMessages)
+            const aiPlaceholder = createMessage('assistant', '')
+            appendMessage(convId, userMsg)
+            appendMessage(convId, aiPlaceholder)
             setInput('')
             setIsLoading(true)
             isFetchingRef.current = true
@@ -139,10 +167,14 @@ const AIPanel = () => {
             setTypingMessageId(aiPlaceholder.id)
             typewriterQueueRef.current = []
 
-            const apiMessages = [...messages, userMsg].map((msg) => ({
-                role: msg.role === 'ai' ? 'assistant' : msg.role,
-                content: msg.content,
-            }))
+            // apiMessages = 当前会话已确认消息（含刚追加的 user 消息）
+            const apiMessages = useConversationStore
+                .getState()
+                .messagesByConv[convId]
+                .map((msg) => ({
+                    role: msg.role === 'assistant' ? 'assistant' : 'user',
+                    content: msg.content,
+                }))
 
             // 单篇限定 = 正在阅读的文献（readerId）；无阅读器 = 全局 RAG
             const docId = readerId ?? undefined
@@ -159,19 +191,15 @@ const AIPanel = () => {
                     taskType,
                     question,
                     enqueueTypewriterText,
-                    docId
+                    docId,
+                    convId
                 )
             } catch (error) {
                 console.error(error)
                 typewriterQueueRef.current = []
                 stopTypewriter()
-                setMessages((prev) =>
-                    prev.map((msg) =>
-                        msg.id === aiPlaceholder.id && !msg.content
-                            ? { ...msg, content: '请求失败，请稍后重试。' }
-                            : msg
-                    )
-                )
+                // 占位为空 → 直接写入错误文本（追加语义，空串追加等于替换）
+                appendAiContent(convId, aiPlaceholder.id, '请求失败，请稍后重试。')
                 activeAiMessageIdRef.current = null
                 setTypingMessageId(null)
             } finally {
@@ -187,12 +215,13 @@ const AIPanel = () => {
             }
         },
         [
-            messages,
             isLoading,
             activeNoteId,
             notes,
             readerId,
             createMessage,
+            appendMessage,
+            appendAiContent,
             enqueueTypewriterText,
             stopTypewriter,
             startTypewriter,
@@ -282,11 +311,12 @@ const AIPanel = () => {
                     break
                 case 'task.completed':
                     patchResearchState((s) => ({ ...s, status: 'completed' }))
-                    // 答案进消息流：复用现有气泡 + 打字机
+                    // 答案进消息流：复用现有气泡 + 打字机（M2 C3：写入当前会话）
                     const answer = researchAnswerRef.current
-                    if (answer) {
-                        const aiMsg = createMessage('ai', '')
-                        setMessages((prev) => [...prev, aiMsg])
+                    const convId = useConversationStore.getState().activeId
+                    if (answer && convId) {
+                        const aiMsg = createMessage('assistant', '')
+                        appendMessage(convId, aiMsg)
                         activeAiMessageIdRef.current = aiMsg.id
                         setTypingMessageId(aiMsg.id)
                         typewriterQueueRef.current = []
@@ -312,10 +342,11 @@ const AIPanel = () => {
     const sendResearchTask = useCallback(
         async (content: string) => {
             const question = content.trim()
-            if (!question || isLoading || researchRunning) return
+            const convId = useConversationStore.getState().activeId
+            if (!question || isLoading || researchRunning || !convId) return
 
             const userMsg = createMessage('user', question)
-            setMessages((prev) => [...prev, userMsg])
+            appendMessage(convId, userMsg)
             setInput('')
             setResearchRunning(true)
             setResearchState({ taskId: '', status: 'created', steps: [], error: null })
@@ -324,7 +355,10 @@ const AIPanel = () => {
             const scope = readerId ? { doc_id: readerId } : undefined
 
             try {
-                await fetchResearchTask({ question, enableWeb, scope }, handleResearchEvent)
+                await fetchResearchTask(
+                    { question, enableWeb, scope, conversationId: convId },
+                    handleResearchEvent
+                )
             } catch (error) {
                 console.error(error)
                 patchResearchState((s) => ({
@@ -336,7 +370,7 @@ const AIPanel = () => {
                 setResearchRunning(false)
             }
         },
-        [isLoading, researchRunning, readerId, enableWeb, createMessage, handleResearchEvent, patchResearchState]
+        [isLoading, researchRunning, readerId, enableWeb, createMessage, appendMessage, handleResearchEvent, patchResearchState]
     )
 
     const handleSend = useCallback(() => {
@@ -359,6 +393,19 @@ const AIPanel = () => {
         void sendMessage(`${instruction}${origin}：\n\n${aiTask.text}`)
         useNoteStore.getState().clearAiTask()
     }, [aiTask, sendMessage])
+
+    // M2 C3：切换会话 → 清理进行中的打字机/请求状态/研究任务视图。
+    // 在途请求不受影响（发送时已捕获旧 convId，结果仍写入旧会话，数据不串）。
+    useEffect(() => {
+        stopTypewriter()
+        typewriterQueueRef.current = []
+        isFetchingRef.current = false
+        activeAiMessageIdRef.current = null
+        setIsLoading(false)
+        setTypingMessageId(null)
+        setResearchState(null)
+        researchAnswerRef.current = ''
+    }, [activeConvId, stopTypewriter])
 
     if (!isAiPanelOpen) return null
 
@@ -385,6 +432,72 @@ const AIPanel = () => {
                     className='ml-auto grid size-9 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground'
                 >
                     <ChevronRight className='size-4' />
+                </button>
+            </div>
+
+            {/* M2 C3：会话栏——当前会话切换（下拉）+ 新建（研究任务运行中禁用） */}
+            <div className='flex items-center gap-1.5 border-b border-border px-4 py-1.5'>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button
+                            className='flex h-7 max-w-[240px] items-center gap-1 rounded-md border border-border bg-background px-2 text-xs text-foreground transition-colors hover:border-muted-foreground/50'
+                            title='切换会话'
+                        >
+                            <MessageSquare className='size-3 shrink-0 text-muted-foreground' />
+                            <span className='truncate'>
+                                {conversations.find((c) => c.id === activeConvId)?.title ?? '新对话'}
+                            </span>
+                            <ChevronDown className='size-3 shrink-0 text-muted-foreground' />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align='start' className='w-60 p-1'>
+                        {conversations.length === 0 && (
+                            <div className='px-2 py-3 text-center text-xs text-muted-foreground'>
+                                暂无会话
+                            </div>
+                        )}
+                        {conversations.map((conv) => (
+                            <DropdownMenuItem
+                                key={conv.id}
+                                onClick={() => void selectConversation(conv.id)}
+                                disabled={researchRunning}
+                                className={cn(
+                                    'cursor-pointer',
+                                    conv.id === activeConvId && 'bg-primary/10 text-primary'
+                                )}
+                            >
+                                <span className='min-w-0 flex-1 truncate'>{conv.title}</span>
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        void removeConversation(conv.id)
+                                    }}
+                                    title='删除会话'
+                                    className='grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-background hover:text-destructive'
+                                >
+                                    <X className='size-3' />
+                                </button>
+                            </DropdownMenuItem>
+                        ))}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            onClick={() => void createConversation()}
+                            disabled={researchRunning}
+                            className='cursor-pointer'
+                        >
+                            <Plus className='size-3.5 text-muted-foreground' />
+                            新建会话
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                <button
+                    onClick={() => void createConversation()}
+                    disabled={researchRunning}
+                    title='新建会话'
+                    className='grid size-7 shrink-0 place-items-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground disabled:opacity-40'
+                >
+                    <Plus className='size-3.5' />
                 </button>
             </div>
 
