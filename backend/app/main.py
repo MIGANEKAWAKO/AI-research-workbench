@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Dict, List
@@ -20,7 +21,8 @@ from .prompts import (
     SYSTEM_PROMPT_TEMPLATE,
     TASK_PROMPTS,
 )
-from .routers import documents, export_api, fs, kb_api, research
+from .routers import documents, events, export_api, fs, kb_api, research
+from .watcher import VaultWatcher
 
 from .rag import build_rag_context
 
@@ -33,7 +35,18 @@ async def lifespan(app: FastAPI):
         print("启动索引扫描完成")
     except Exception as exc:
         print("启动索引扫描失败（继续启动）:", repr(exc))
+
+    # A5：watchdog 监听 vault 变更 → 增量重扫 → SSE 广播；失败降级为前端 30s 轮询
+    watcher = None
+    if settings.watch_enabled:
+        try:
+            watcher = VaultWatcher()
+            watcher.start(asyncio.get_running_loop())
+        except Exception as exc:
+            print("watchdog 启动失败（降级为前端轮询）:", repr(exc))
     yield
+    if watcher is not None:
+        watcher.stop()
 
 
 app = FastAPI(title="AI Note Server", lifespan=lifespan)
@@ -43,6 +56,7 @@ app.include_router(documents.router, prefix="/api/documents")
 app.include_router(kb_api.router, prefix="/api/kb")
 app.include_router(export_api.router, prefix="/api/export")
 app.include_router(research.router, prefix="/api/research")
+app.include_router(events.router, prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,

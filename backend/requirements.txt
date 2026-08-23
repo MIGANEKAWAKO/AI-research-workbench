@@ -21,3 +21,6 @@ httpx>=0.27,<1
 # 笔记 frontmatter 解析（后端索引侧与前端 gray-matter 解析同一文件）
 PyYAML>=6.0,<7
 
+# A5 vault 变更监听（watchdog，跨平台文件系统事件）
+watchdog>=4,<7
+

@@ -29,6 +29,9 @@ class Settings:
     web_search_provider: str = os.getenv("WEB_SEARCH_PROVIDER", "")
     web_search_timeout: float = float(os.getenv("WEB_SEARCH_TIMEOUT", "10"))
 
+    # A5 vault 变更监听：watchdog 启动失败或 CI 测试可置 0 关闭（降级为前端轮询）
+    watch_enabled: bool = os.getenv("WATCH_ENABLED", "1") == "1"
+
 
 settings = Settings()
 
