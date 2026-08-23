@@ -1,4 +1,4 @@
-import { useNoteStore, type AiAskType } from '@/store/useNoteStore'
+import { useNoteStore } from '@/store/useNoteStore'
 import { useLiteratureStore } from '@/store/useLiteratureStore'
 import { useDataStore } from '@/store/useDataStore'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -6,6 +6,7 @@ import { ChevronRight, Globe, Send, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { fetchAiResponse, type AiTaskType } from '@/services/ai'
+import { ASK_INSTRUCTIONS } from '@/lib/ai-instructions'
 import { fetchResearchTask } from '@/services/research'
 import ResearchTaskView from './ResearchTaskView'
 import type { ResearchEvent, ResearchTaskState } from '@/types/research'
@@ -25,14 +26,6 @@ const AI_TASKS: { type: AiTaskType; label: string }[] = [
 
 // UI 重构：设计稿快捷指令 chips（点击填入输入框）
 const QUICK_PROMPTS = ['总结当前笔记', '解释这段代码', '生成引用']
-
-// F7：划词提问的指令模板（对话模式发送，带 docId 限定当前文献）
-// 结尾不加冒号：消费时动态拼出处信息（文献标题 + 页码），见 aiTask effect
-const ASK_INSTRUCTIONS: Record<AiAskType, string> = {
-    explain: '请用中文解释以下论文片段，说明其核心含义与研究背景',
-    translate: '请将以下论文片段翻译成中文',
-    summarize: '请用要点总结以下论文片段的核心内容',
-}
 
 const TYPEWRITER_INTERVAL_MS = 24
 

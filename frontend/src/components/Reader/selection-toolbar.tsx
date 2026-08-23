@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bot, Copy, FileText, Highlighter } from 'lucide-react'
+import { Bot, Copy, FileText, Highlighter, Languages } from 'lucide-react'
 import type { AiAskType } from '@/store/useNoteStore'
 import type { TextSelection } from './pdf-page'
 
@@ -10,6 +10,8 @@ interface SelectionToolbarProps {
     onAskAi: (type: AiAskType) => void
     /** M2 A1：把选中文字固化为高亮（落盘 .kb/annotations.json） */
     onHighlight: () => void
+    /** M2 A2：划词翻译（内联译文浮层，不跳 AI 面板） */
+    onTranslate: () => void
 }
 
 /**
@@ -20,7 +22,7 @@ interface SelectionToolbarProps {
  * 水平居中于选区、垂直在选区上方；选区贴顶时夹到视口内。
  * onMouseDown 阻止默认：避免点击按钮瞬间浏览器清空选区导致视觉闪烁。
  */
-export function SelectionToolbar({ selection, onCopy, onCite, onAskAi, onHighlight }: SelectionToolbarProps) {
+export function SelectionToolbar({ selection, onCopy, onCite, onAskAi, onHighlight, onTranslate }: SelectionToolbarProps) {
     const [expanded, setExpanded] = useState(false)
     const { rect } = selection
     const left = (rect.left + rect.right) / 2
@@ -44,6 +46,12 @@ export function SelectionToolbar({ selection, onCopy, onCite, onAskAi, onHighlig
             <button onClick={onHighlight} className={buttonClass} title="高亮选中文字（可添加批注）">
                 <Highlighter className="h-3.5 w-3.5" />
                 高亮
+            </button>
+
+            {/* M2 A2：划词翻译（内联译文浮层） */}
+            <button onClick={onTranslate} className={buttonClass} title="翻译选中文字（内联译文）">
+                <Languages className="h-3.5 w-3.5" />
+                翻译
             </button>
 
             {!expanded ? (

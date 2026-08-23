@@ -8,6 +8,7 @@ import { useNoteStore, type AiAskType } from '@/store/useNoteStore'
 import { PdfPage, type TextSelection } from './pdf-page'
 import { SelectionToolbar } from './selection-toolbar'
 import { AnnotationPopup } from './annotation-popup'
+import { TranslatePopup } from './translate-popup'
 import { CitePicker } from './cite-picker'
 
 const MIN_SCALE = 0.5
@@ -52,6 +53,11 @@ export function PdfReader() {
     const [citeOpen, setCiteOpen] = useState(false)
     // M2 A1：批注浮层状态（点击高亮 mark 打开；rect 供浮层定位）
     const [popup, setPopup] = useState<{ annId: string; rect: DOMRect } | null>(null)
+    // M2 A2：翻译浮层状态（点击划词浮层「翻译」打开；text/rect 在清选区前捕获）
+    const [translatePopup, setTranslatePopup] = useState<{
+        text: string
+        rect: { top: number; left: number; right: number; bottom: number }
+    } | null>(null)
 
     // 加载 PDF：entry.id 变化（切换文献/关闭）时重载；cleanup 释放旧文档
     useEffect(() => {
@@ -66,6 +72,7 @@ export function PdfReader() {
         setSelection(null)
         setCiteOpen(false)
         setPopup(null)
+        setTranslatePopup(null)
 
         loadPdfDocument(entry.pdfPath)
             .then((d) => {
@@ -159,6 +166,13 @@ export function PdfReader() {
         })
         clearSelection()
     }, [selection, entry, addAnnotation, clearSelection])
+
+    // M2 A2：划词翻译 → 打开译文浮层（text/rect 在清选区前捕获，浮层不依赖选区存活）
+    const handleTranslate = useCallback(() => {
+        if (!selection) return
+        setTranslatePopup({ text: selection.text, rect: selection.rect })
+        clearSelection()
+    }, [selection, clearSelection])
 
     // M2 A1：点击高亮 mark → 打开批注浮层（同时关闭划词浮层，避免重叠）
     const handleAnnotationClick = useCallback(
@@ -312,6 +326,7 @@ export function PdfReader() {
                     onCite={handleCite}
                     onAskAi={handleAskAi}
                     onHighlight={handleHighlight}
+                    onTranslate={handleTranslate}
                 />
             )}
 
@@ -330,6 +345,16 @@ export function PdfReader() {
                         setPopup(null)
                     }}
                     onClose={() => setPopup(null)}
+                />
+            )}
+
+            {/* M2 A2：划词翻译浮层（挂载即请求，流式显示译文） */}
+            {translatePopup && (
+                <TranslatePopup
+                    text={translatePopup.text}
+                    rect={translatePopup.rect}
+                    docId={entry.id}
+                    onClose={() => setTranslatePopup(null)}
                 />
             )}
 
