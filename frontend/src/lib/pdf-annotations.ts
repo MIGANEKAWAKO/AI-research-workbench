@@ -120,7 +120,14 @@ function intersectRangeWithNode(range: Range, node: Text): { start: number; end:
     return start === -1 ? null : { start, end }
 }
 
-/** 在 div 的全局偏移坐标系中，把 [start, end) 对应的文本段包进新 mark。 */
+/**
+ * 在 div 的全局偏移坐标系中，把 [start, end) 对应的文本段包进新 mark。
+ *
+ * 必须"先收集、后处理"两阶段：walkTextNodes 遍历的是 childNodes 活集合，
+ * 若在回调里直接 splitText/replaceChild（wrapTextNode），遍历会继续进入
+ * 刚创建的 mark → 无限嵌套 → 栈溢出卡死（A1 验收踩坑，见 docs/面试问答.md ④Q25）。
+ * 收集阶段不改 DOM，处理阶段逐个切包，互不干扰。
+ */
 function wrapRange(
     div: HTMLElement,
     start: number,
@@ -129,15 +136,20 @@ function wrapRange(
     onMarkClick: (annId: string, rect: DOMRect) => void
 ): void {
     if (end <= start) return
+    const targets: { node: Text; offset: number }[] = []
     walkTextNodes(div, (node, offset) => {
         const nodeLen = node.textContent?.length ?? 0
         const nodeStart = offset
         const nodeEnd = offset + nodeLen
         if (nodeEnd <= start || nodeStart >= end) return
-        const ls = Math.max(start, nodeStart) - nodeStart
-        const le = Math.min(end, nodeEnd) - nodeStart
-        wrapTextNode(node, ls, le, annId, onMarkClick)
+        targets.push({ node, offset })
     })
+    for (const { node, offset } of targets) {
+        const nodeLen = node.textContent?.length ?? 0
+        const ls = Math.max(start, offset) - offset
+        const le = Math.min(end, offset + nodeLen) - offset
+        wrapTextNode(node, ls, le, annId, onMarkClick)
+    }
 }
 
 /** 把单个 Text 节点的 [start, end) 局部区间切出来包进 mark（splitText 语义见注释）。 */
