@@ -5,7 +5,7 @@ from __future__ import annotations
 import anyio
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .. import export
 from ..citation_formats import FORMATTERS
@@ -21,12 +21,14 @@ class ReferencesRequest(BaseModel):
     format: str = "gbt7714"
     noteId: str | None = None
     collectionId: str | None = None
+    collectionIds: list[str] = Field(default_factory=list)
     asFile: bool = True
 
 
 class BibtexRequest(BaseModel):
     noteId: str | None = None
     collectionId: str | None = None
+    collectionIds: list[str] = Field(default_factory=list)
     asFile: bool = True
 
 
@@ -39,7 +41,7 @@ async def export_references(req: ReferencesRequest):
             detail=f"不支持的格式: {req.format}（可选 {', '.join(FORMATTERS)}）",
         )
     entries = await anyio.to_thread.run_sync(
-        export.collect_references, req.noteId, req.collectionId
+        export.collect_references, req.noteId, req.collectionId, req.collectionIds
     )
     formatter = FORMATTERS[req.format]
     if req.asFile:
@@ -59,7 +61,7 @@ async def export_references(req: ReferencesRequest):
 async def export_bibtex(req: BibtexRequest):
     """BibTeX 导出：asFile=true 下载 .bib；false 返回 JSON 文本。"""
     entries = await anyio.to_thread.run_sync(
-        export.collect_references, req.noteId, req.collectionId
+        export.collect_references, req.noteId, req.collectionId, req.collectionIds
     )
     text = await anyio.to_thread.run_sync(export.build_bibtex, entries)
     if req.asFile:

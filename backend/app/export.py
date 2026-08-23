@@ -16,16 +16,25 @@ NOTE_DIR = "笔记"
 
 
 def collect_references(
-    note_id: str | None = None, collection_id: str | None = None
+    note_id: str | None = None,
+    collection_id: str | None = None,
+    collection_ids: list[str] | None = None,
 ) -> list[LiteratureEntry]:
     """聚合笔记 frontmatter cites → 去重文献列表（按文献在 literature.json 中顺序）。
 
-    note_id：只看该笔记（相对路径去 .md）；collection_id：只看该集合的笔记；缺省 = 全部。
+    note_id：只看该笔记（相对路径去 .md）；
+    collection_id / collection_ids：只看这些集合的笔记（单值为 A4 前兼容保留）；缺省 = 全部。
     """
     vault = default_vault_path()
     note_dir = vault / NOTE_DIR
     if not note_dir.exists():
         return []
+
+    filter_collections: set[str] | None = None
+    if collection_ids:
+        filter_collections = set(collection_ids)
+    elif collection_id:
+        filter_collections = {collection_id}
 
     lit_map = {entry.id: entry for entry in load_literature()}
     seen: set[str] = set()
@@ -37,7 +46,7 @@ def collect_references(
         if note_id and doc_id != note_id:
             continue
         meta, _ = parse_frontmatter(note_path.read_text(encoding="utf-8"))
-        if collection_id and meta.get("collection") != collection_id:
+        if filter_collections is not None and meta.get("collection") not in filter_collections:
             continue
         for lit_id in meta.get("cites") or []:
             if lit_id in seen or lit_id not in lit_map:
