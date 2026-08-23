@@ -11,13 +11,21 @@ export const fetchResearchTask = async (
     question: string
     enableWeb: boolean
     scope?: { doc_id?: string; collection_id?: string }
+    conversationId?: string // M2 C2：研究任务答案存入会话
   },
   onEvent: (event: ResearchEvent) => void
 ) => {
+  const payload: Record<string, unknown> = {
+    question: body.question,
+    enableWeb: body.enableWeb,
+  }
+  if (body.scope) payload.scope = body.scope
+  if (body.conversationId) payload.conversation_id = body.conversationId
+
   const response = await fetch('http://localhost:3001/api/research/tasks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   })
 
   if (!response.ok) {

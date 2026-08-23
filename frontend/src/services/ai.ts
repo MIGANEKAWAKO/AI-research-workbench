@@ -12,7 +12,8 @@ export const fetchAiResponse = async (
   taskType: AiTaskType | undefined,
   text: string,
   onChunk: (content: string) => void,
-  docId?: string
+  docId?: string,
+  conversationId?: string // M2 C2：会话记忆——历史注入上下文 + 新消息落库
 ) => {
   const body: Record<string, unknown> = { messages, noteContext }
   if (taskType && text.trim()) {
@@ -20,6 +21,7 @@ export const fetchAiResponse = async (
     body.text = text
   }
   if (docId) body.docId = docId
+  if (conversationId) body.conversation_id = conversationId
 
   const response = await fetch('http://localhost:3001/api/chat', {
     method: 'POST',

@@ -44,6 +44,24 @@ export interface PdfAnnotation {
     updatedAt: number
 }
 
+// ── M2 C3：AI 会话（对话记忆，后端持久化于 .kb/conversations.json，接口见 PRD 10.2 C1）──
+
+/** AI 会话：消息按会话隔离；/api/chat 与 research 带 conversation_id 注入历史（C2） */
+export interface Conversation {
+    id: string
+    title: string
+    createdAt: string
+    updatedAt: string
+}
+
+/** 会话消息（后端持久形态：role 为 user/assistant，无前端 ai 别名） */
+export interface ConversationMessage {
+    id: string
+    role: 'user' | 'assistant'
+    content: string
+    createdAt: string
+}
+
 // 文献元数据（对齐后端 B5 LiteratureEntry，见 docs/后端接口文档.md）
 export interface LiteratureEntry {
     id: string          // 12 位 hex，后端生成（uuid 前缀）
