@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Bell, Download, Info, Moon, ShieldCheck, Sun, Trash2 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -14,13 +14,15 @@ import { useTheme } from '@/hooks/use-theme'
 import { useNoteStore } from '@/store/useNoteStore'
 import { useDataStore } from '@/store/useDataStore'
 import { useLiteratureStore } from '@/store/useLiteratureStore'
+import { ExportDialog } from '@/components/ExportDialog'
 import { cn } from '@/lib/utils'
 
 /**
  * 顶栏（UI 重构 Step 2，对齐设计稿 52px topbar）：
  * 左：logo「知微·科研工作台」；中：当前打开文档标题（空则隐藏）；
  * 右：主题切换、通知占位（绿点）、头像 + 个人菜单。
- * 通知/导出/关于/清空本地数据为占位项（后端暂无对应接口，点击 toast 提示）。
+ * 通知/关于/清空本地数据为占位项（后端暂无对应接口，点击 toast 提示）；
+ * 导出已接入 M2 A4 集合级导出（ExportDialog：docx 三格式 / BibTeX + 集合过滤）。
  */
 const TopBar = () => {
     const { theme, toggleTheme } = useTheme()
@@ -30,6 +32,7 @@ const TopBar = () => {
     const readerId = useLiteratureStore((s) => s.readerId)
     const activeLitId = useLiteratureStore((s) => s.activeId)
     const entries = useLiteratureStore((s) => s.entries)
+    const [exportOpen, setExportOpen] = useState(false)
 
     // 中央标题：文献模式取 readerId ?? activeId 对应文献；笔记模式取当前笔记
     const openTitle = useMemo(() => {
@@ -117,7 +120,10 @@ const TopBar = () => {
                             <ThemeIcon className="size-4 text-muted-foreground" />
                             {isDark ? '切换为浅色' : '切换为深色'}
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => toast.success('本地数据已导出至下载文件夹')} className="cursor-pointer">
+                        <DropdownMenuItem
+                            onClick={() => setExportOpen(true)}
+                            className="cursor-pointer"
+                        >
                             <Download className="size-4 text-muted-foreground" />
                             导出 / 备份数据
                         </DropdownMenuItem>
@@ -137,6 +143,9 @@ const TopBar = () => {
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
+
+            {/* M2 A4：集合级导出对话框（docx 三格式 / BibTeX + 集合过滤） */}
+            <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
         </header>
     )
 }
