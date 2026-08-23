@@ -173,6 +173,9 @@ export function PdfPage({
             <div
                 ref={textLayerDivRef}
                 className="pdf-text-layer"
+                // M2 A2 修复：--total-scale-factor 必须 = 当前缩放 scale，
+                // 官方字号链（span font-size/transform）依赖它，缺失则 span 盒尺寸错乱
+                style={{ ['--total-scale-factor' as string]: String(scale) }}
                 onMouseUp={handleMouseUp}
             />
         </div>
