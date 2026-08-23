@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { LiteratureEntry } from '@/types'
 import { listLiterature, importLiterature, deleteLiterature } from '@/services/literature'
+import { useAnnotationStore } from '@/store/useAnnotationStore'
 
 /**
  * 文献库数据源（F4）。
@@ -74,6 +75,8 @@ export const useLiteratureStore = create<LiteratureState>((set) => ({
                 entries: state.entries.filter((e) => e.id !== id),
                 activeId: state.activeId === id ? null : state.activeId,
             }))
+            // M2 A1：联动清理该文献的高亮批注（含持久化），不留孤儿数据
+            useAnnotationStore.getState().removeByDocId(id)
         } catch (e) {
             set({ error: e instanceof Error ? e.message : '删除失败' })
         }

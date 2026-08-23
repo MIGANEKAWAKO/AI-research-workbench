@@ -26,6 +26,8 @@ interface AnnotationState {
     add: (input: Omit<PdfAnnotation, 'id' | 'createdAt' | 'updatedAt'>) => void
     updateNote: (id: string, note: string) => void
     remove: (id: string) => void
+    /** 删除文献时联动清理其全部批注（避免 .kb/annotations.json 留孤儿数据） */
+    removeByDocId: (docId: string) => void
     clearSaveError: () => void
 }
 
@@ -89,6 +91,13 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
 
     remove: (id) => {
         set((state) => ({ annotations: state.annotations.filter((a) => a.id !== id) }))
+        schedulePersist()
+    },
+
+    removeByDocId: (docId) => {
+        set((state) => ({
+            annotations: state.annotations.filter((a) => a.docId !== docId),
+        }))
         schedulePersist()
     },
 

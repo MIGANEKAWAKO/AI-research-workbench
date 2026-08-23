@@ -7,6 +7,7 @@ import { useAnnotationStore } from '@/store/useAnnotationStore'
 import { useNoteStore, type AiAskType } from '@/store/useNoteStore'
 import { PdfPage, type TextSelection } from './pdf-page'
 import { SelectionToolbar } from './selection-toolbar'
+import { AnnotationPopup } from './annotation-popup'
 import { CitePicker } from './cite-picker'
 
 const MIN_SCALE = 0.5
@@ -29,6 +30,8 @@ export function PdfReader() {
     const annotations = useAnnotationStore((s) => s.annotations)
     const loadAnnotations = useAnnotationStore((s) => s.load)
     const addAnnotation = useAnnotationStore((s) => s.add)
+    const updateNote = useAnnotationStore((s) => s.updateNote)
+    const removeAnnotation = useAnnotationStore((s) => s.remove)
 
     useEffect(() => {
         void loadAnnotations()
@@ -47,6 +50,8 @@ export function PdfReader() {
     const [scale, setScale] = useState(1)
     const [selection, setSelection] = useState<TextSelection | null>(null)
     const [citeOpen, setCiteOpen] = useState(false)
+    // M2 A1：批注浮层状态（点击高亮 mark 打开；rect 供浮层定位）
+    const [popup, setPopup] = useState<{ annId: string; rect: DOMRect } | null>(null)
 
     // 加载 PDF：entry.id 变化（切换文献/关闭）时重载；cleanup 释放旧文档
     useEffect(() => {
@@ -60,6 +65,7 @@ export function PdfReader() {
         setTotalPages(0)
         setSelection(null)
         setCiteOpen(false)
+        setPopup(null)
 
         loadPdfDocument(entry.pdfPath)
             .then((d) => {
@@ -153,6 +159,21 @@ export function PdfReader() {
         })
         clearSelection()
     }, [selection, entry, addAnnotation, clearSelection])
+
+    // M2 A1：点击高亮 mark → 打开批注浮层（同时关闭划词浮层，避免重叠）
+    const handleAnnotationClick = useCallback(
+        (annId: string, rect: DOMRect) => {
+            setPopup({ annId, rect })
+            clearSelection()
+        },
+        [clearSelection]
+    )
+
+    // M2 A1：浮层展示的数据（annotation 被删除/数据未加载时浮层不渲染）
+    const popupAnnotation = useMemo(
+        () => (popup ? annotations.find((a) => a.id === popup.annId) ?? null : null),
+        [annotations, popup]
+    )
 
     const handleCiteClose = useCallback(() => {
         setCiteOpen(false)
@@ -277,6 +298,7 @@ export function PdfReader() {
                             scale={scale}
                             onTextSelect={setSelection}
                             annotations={pageAnnotations}
+                            onAnnotationClick={handleAnnotationClick}
                         />
                     )}
                 </div>
@@ -290,6 +312,24 @@ export function PdfReader() {
                     onCite={handleCite}
                     onAskAi={handleAskAi}
                     onHighlight={handleHighlight}
+                />
+            )}
+
+            {/* M2 A1：批注编辑浮层（key 保证 annotation 切换时编辑态重置） */}
+            {popup && popupAnnotation && (
+                <AnnotationPopup
+                    key={popupAnnotation.id}
+                    annotation={popupAnnotation}
+                    rect={popup.rect}
+                    onSave={(note) => {
+                        updateNote(popupAnnotation.id, note)
+                        setPopup(null)
+                    }}
+                    onDelete={() => {
+                        removeAnnotation(popupAnnotation.id)
+                        setPopup(null)
+                    }}
+                    onClose={() => setPopup(null)}
                 />
             )}
 
