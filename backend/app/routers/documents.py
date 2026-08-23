@@ -14,15 +14,32 @@ from pathlib import Path
 
 import anyio
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from .. import indexer, kb, metadata
-from ..literature import LiteratureEntry, add_entry, get_entry, load_literature, remove_entry
+from ..literature import (
+    LiteratureEntry,
+    add_entry,
+    get_entry,
+    load_literature,
+    remove_entry,
+    update_entry,
+)
 from ..vault import default_vault_path
 
 router = APIRouter()
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 FILE_NAME_MAX_LEN = 100  # 清洗后原名最长字符（Windows 255 限制内留余量）
+
+VALID_STATUSES = ("未读", "在读", "已读")
+
+
+class ProgressUpdate(BaseModel):
+    """阅读进度更新：status / lastPage 均可选，至少提供一个（两者都空由路由拒绝）。"""
+
+    status: str | None = None
+    lastPage: int | None = None
 
 
 def _clean_filename(raw: str) -> str:
@@ -147,6 +164,44 @@ def list_documents():
     entries = load_literature()
     entries.sort(key=lambda e: e.importedAt, reverse=True)
     return {"entries": [entry.model_dump() for entry in entries]}
+
+
+@router.put("/{lit_id}/progress")
+def update_progress(lit_id: str, req: ProgressUpdate):
+    """更新阅读状态与进度（A3）：校验 → 原地更新 → literature.json 原子写。
+
+    status 未变 / lastPage 未变时跳过写盘（幂等，返回当前条目）。
+    """
+    entry = get_entry(lit_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="文献不存在")
+
+    if req.status is None and req.lastPage is None:
+        raise HTTPException(status_code=400, detail="status 或 lastPage 至少提供一个")
+
+    changed = False
+    if req.status is not None:
+        if req.status not in VALID_STATUSES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"无效状态: {req.status}（可选 {'/'.join(VALID_STATUSES)}）",
+            )
+        if entry.status != req.status:
+            entry.status = req.status
+            changed = True
+    if req.lastPage is not None:
+        if req.lastPage < 0:
+            raise HTTPException(status_code=400, detail="lastPage 不能为负数")
+        if entry.lastPage != req.lastPage:
+            entry.lastPage = req.lastPage
+            changed = True
+
+    if not changed:
+        return entry.model_dump()
+
+    entry.progressAt = datetime.now().isoformat(timespec="seconds")
+    update_entry(entry)
+    return entry.model_dump()
 
 
 @router.delete("/{lit_id}")

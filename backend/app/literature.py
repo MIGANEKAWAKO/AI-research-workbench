@@ -30,6 +30,8 @@ class LiteratureEntry(BaseModel):
     arxivId: str = ""
     pdfPath: str = ""  # vault 内相对路径
     status: str = "未读"
+    lastPage: int | None = None  # A3 阅读进度：最近页码（未开始 = None）
+    progressAt: str = ""  # A3 进度最近更新时间（ISO8601）
     collectionIds: list[str] = []
     tags: list[str] = []
     importedAt: str = ""
@@ -88,3 +90,17 @@ def remove_entry(lit_id: str) -> bool:
         return False
     save_literature(remaining)
     return True
+
+
+def update_entry(entry: LiteratureEntry) -> bool:
+    """按 id 替换条目（原子写全量）；不存在返回 False。
+
+    A3 阅读进度与后续 P2 元数据编辑共用此更新入口。
+    """
+    entries = load_literature()
+    for i, item in enumerate(entries):
+        if item.id == entry.id:
+            entries[i] = entry
+            save_literature(entries)
+            return True
+    return False
