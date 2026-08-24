@@ -200,3 +200,33 @@ def test_delete_via_api(tmp_vault):
     conv = conv_store.create_conversation(title="A")
     assert client.delete(f"/api/conversations/{conv.id}").json() == {"ok": True}
     assert client.delete(f"/api/conversations/{conv.id}").status_code == 404
+
+
+# ---- 标题持久化（PUT /{id}） ----
+
+def test_update_title_via_api_persists(tmp_vault):
+    conv = conv_store.create_conversation()
+    resp = client.put(f"/api/conversations/{conv.id}", json={"title": "  RAG 调研  "})
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "RAG 调研"  # strip 后落库
+    # 重新加载仍可见（真实写盘）
+    assert conv_store.get_conversation(conv.id).title == "RAG 调研"
+
+
+def test_update_title_idempotent_no_write(tmp_vault):
+    conv = conv_store.create_conversation(title="原标题")
+    conv_store.append_message(conv.id, "user", "q")  # 制造 updatedAt 变化
+    before = conv_store.get_conversation(conv.id).updated_at
+    resp = client.put(f"/api/conversations/{conv.id}", json={"title": "原标题"})
+    assert resp.status_code == 200
+    assert conv_store.get_conversation(conv.id).updated_at == before  # 未变不写盘
+
+
+def test_update_title_validations(tmp_vault):
+    conv = conv_store.create_conversation()
+    # 空标题 400
+    assert client.put(f"/api/conversations/{conv.id}", json={"title": "   "}).status_code == 400
+    # 超长 400
+    assert client.put(f"/api/conversations/{conv.id}", json={"title": "长" * 101}).status_code == 400
+    # 会话不存在 404
+    assert client.put("/api/conversations/c_missing", json={"title": "x"}).status_code == 404
