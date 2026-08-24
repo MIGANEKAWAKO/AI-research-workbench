@@ -68,8 +68,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     backendOk: false,
 
     load: async () => {
-        // 已进入降级模式后不再重试拉取（本地数据即真源）；真模式下每次刷新列表
-        if (!get().backendOk && get().conversations.length > 0) return
+        // 每次面板打开都尝试（真模式刷新列表；降级模式重试——后端恢复后自动切真模式，
+        // 降级期间的本地会话会被后端列表覆盖，符合"降级数据不持久"约定）
         set({ loading: true, error: null })
         try {
             const conversations = await listConversations()

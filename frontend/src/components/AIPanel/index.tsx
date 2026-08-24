@@ -171,14 +171,15 @@ const AIPanel = () => {
             setTypingMessageId(aiPlaceholder.id)
             typewriterQueueRef.current = []
 
-            // apiMessages = 当前会话已确认消息（含刚追加的 user 消息）
-            const apiMessages = useConversationStore
-                .getState()
-                .messagesByConv[convId]
-                .map((msg) => ({
-                    role: msg.role === 'assistant' ? 'assistant' : 'user',
-                    content: msg.content,
-                }))
+            // 发送给后端的消息：真模式只发本轮（历史由后端 C2 滑动窗口注入，
+            // 前端再发全量会与 history 重复）；降级模式发全量（前端携带历史兜底）。
+            const convStore = useConversationStore.getState()
+            const apiMessages = convStore.backendOk
+                ? [{ role: 'user' as const, content: question }]
+                : convStore.messagesByConv[convId].map((msg) => ({
+                      role: msg.role === 'assistant' ? 'assistant' : 'user',
+                      content: msg.content,
+                  }))
 
             // 单篇限定 = 正在阅读的文献（readerId）；无阅读器 = 全局 RAG
             const docId = readerId ?? undefined
