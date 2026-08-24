@@ -45,6 +45,16 @@ class ProgressUpdate(BaseModel):
     lastPage: int | None = None
 
 
+class DocumentUpdate(BaseModel):
+    """文献更新（M2 文献集合归属，P2 元数据编辑的先行子集）。
+
+    当前仅支持 collectionIds（文献归入哪些集合）；集合定义由前端管理
+    （.kb/literature-collections.json），后端只持久化归属、不校验集合存在性。
+    """
+
+    collectionIds: list[str] | None = None
+
+
 def _clean_filename(raw: str) -> str:
     """清洗上传文件名：取 basename、非法字符替换、限长；空则 untitled。"""
     name = Path((raw or "").replace("\\", "/")).name
@@ -235,3 +245,26 @@ def delete_document(lit_id: str):
     # 3. json 移除
     remove_entry(lit_id)
     return {"ok": True}
+
+
+@router.put("/{lit_id}")
+def update_document(lit_id: str, req: DocumentUpdate):
+    """更新文献字段（文献集合归属）：collectionIds 白名单更新 → literature.json 原子写。
+
+    集合定义由前端管理（.kb/literature-collections.json），后端只持久化归属、
+    不校验集合存在性（前端自由创建/删除集合）；未变时幂等不写盘。
+    """
+    entry = get_entry(lit_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="文献不存在")
+
+    changed = False
+    if req.collectionIds is not None:
+        cleaned = [c for c in req.collectionIds if isinstance(c, str)]
+        if entry.collectionIds != cleaned:
+            entry.collectionIds = cleaned
+            changed = True
+
+    if changed:
+        update_entry(entry)
+    return entry.model_dump()
