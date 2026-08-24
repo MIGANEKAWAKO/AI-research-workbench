@@ -1,7 +1,7 @@
 import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
+    ResizableHandle,
+    ResizablePanel,
+    ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import Editor from '@/pages/editor'
 import AIPanel from '@/components/AIPanel'
@@ -138,9 +138,9 @@ const Home = () => {
                                 <>
                                     <ResizableHandle withHandle /> {/* 拖拽柄 */}
                                     <ResizablePanel
-                                        defaultSize={30}
-                                        minSize={15}
-                                        maxSize={50}
+                                        defaultSize={240}
+                                        minSize={0}
+                                        maxSize={500}
                                         className="transition-all duration-300 ease-in-out"
                                     >
                                         <AIPanel />
