@@ -62,6 +62,15 @@ export interface ConversationMessage {
     createdAt: string
 }
 
+// ── M2 文献集合（集合定义前端管理 .kb/literature-collections.json；归属存后端 collectionIds）──
+
+/** 文献集合：id 由前端生成，与后端 literature.json 的 collectionIds 值对应 */
+export interface LitCollection {
+    id: string
+    name: string
+    createdAt: number
+}
+
 // 文献元数据（对齐后端 B5 LiteratureEntry，见 docs/后端接口文档.md）
 export interface LiteratureEntry {
     id: string          // 12 位 hex，后端生成（uuid 前缀）

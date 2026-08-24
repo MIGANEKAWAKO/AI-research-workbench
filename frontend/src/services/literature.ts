@@ -71,3 +71,18 @@ export const updateLiteratureProgress = async (
         }
     )
 }
+
+/**
+ * M2 文献集合归属：更新文献 collectionIds（集合定义由前端管理，
+ * 后端只持久化归属、不校验集合存在性；幂等——未变不写盘）。
+ */
+export const updateLiteratureCollections = async (
+    id: string,
+    collectionIds: string[]
+): Promise<LiteratureEntry> => {
+    return request<LiteratureEntry>(`${BASE_URL}/api/documents/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ collectionIds }),
+    })
+}
