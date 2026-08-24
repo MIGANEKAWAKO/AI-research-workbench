@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
 
+from app import conversations as conv_store
 from app.agent.models import ResearchTask, ToolResult
 from app.agent.orchestrator import LLMReply, ResearchOrchestrator, ToolCallRequest
 from app.agent.tools import BaseTool, ToolRegistry
@@ -145,3 +146,34 @@ def test_disable_web_excludes_web_tool(monkeypatch):
     monkeypatch.setattr(research, "build_web_provider", lambda: None)
     orch = research.build_orchestrator(enable_web=False)
     assert "web_search" not in orch.registry.names
+
+
+# ---- C2 会话写回（conversationId） ----
+
+def test_task_persists_question_and_answer_to_conversation(tmp_path, monkeypatch):
+    monkeypatch.setattr(conv_store, "kb_root", lambda: tmp_path / ".kb")
+    llm = MockLLM(plan_content="", rounds=[LLMReply(content="研究结论。")])
+    monkeypatch.setattr(research, "build_orchestrator", _mock_orchestrator_factory(llm))
+
+    conv = conv_store.create_conversation(title="研究会话", source="research")
+    client.post(
+        "/api/research/tasks",
+        json={"question": "总结 RAG", "conversationId": conv.id},
+    )
+
+    conv_after = conv_store.get_conversation(conv.id)
+    assert [m.role for m in conv_after.messages] == ["user", "assistant"]
+    assert conv_after.messages[0].content == "总结 RAG"
+    assert conv_after.messages[1].content == "研究结论。"
+
+
+def test_task_without_conversation_id_does_not_persist(tmp_path, monkeypatch):
+    monkeypatch.setattr(conv_store, "kb_root", lambda: tmp_path / ".kb")
+    llm = MockLLM(plan_content="", rounds=[LLMReply(content="结论")])
+    monkeypatch.setattr(research, "build_orchestrator", _mock_orchestrator_factory(llm))
+
+    conv = conv_store.create_conversation(title="孤立会话")
+    client.post("/api/research/tasks", json={"question": "总结", "conversationId": conv.id})
+    client.post("/api/research/tasks", json={"question": "另一个任务"})  # 无会话 id
+
+    assert len(conv_store.get_conversation(conv.id).messages) == 2  # 只写入第一个任务

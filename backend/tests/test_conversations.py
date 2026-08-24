@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app import conversations as conv_store
+from app.conversations import Conversation, Message, build_history_messages
 from app.routers import conversations as conv_router
 
 app = FastAPI()
@@ -90,6 +91,60 @@ def test_save_roundtrip_preserves_messages(tmp_vault):
     conv_store.append_message(conv.id, "assistant", "a")
     raw = json.loads((tmp_vault / ".kb" / "conversations.json").read_text(encoding="utf-8"))
     assert len(raw[0]["messages"]) == 2
+
+
+# ---- C2 历史滑动窗口（纯函数） ----
+
+def _conv_with(*pairs: tuple[str, str]) -> Conversation:
+    return Conversation(
+        id="c_test",
+        title="t",
+        created_at="2026-01-01T00:00:00",
+        updated_at="2026-01-01T00:00:00",
+        messages=[Message(id=f"m{i}", role=r, content=c, created_at="2026-01-01T00:00:00") for i, (r, c) in enumerate(pairs)],
+    )
+
+
+def test_history_none_or_empty_returns_empty():
+    assert build_history_messages(None) == []
+    assert build_history_messages(_conv_with()) == []
+
+
+def test_history_preserves_order():
+    conv = _conv_with(("user", "q1"), ("assistant", "a1"), ("user", "q2"))
+    history = build_history_messages(conv, max_chars=10_000)
+    assert history == [
+        {"role": "user", "content": "q1"},
+        {"role": "assistant", "content": "a1"},
+        {"role": "user", "content": "q2"},
+    ]
+
+
+def test_history_drops_oldest_when_over_budget():
+    conv = _conv_with(("user", "很长" * 100), ("assistant", "a"), ("user", "新问题"))
+    history = build_history_messages(conv, max_chars=30)
+    # 预算 30：最新 "新问题"(3) + "a"(1) 优先保留，最老的超长消息被丢弃
+    assert history == [
+        {"role": "assistant", "content": "a"},
+        {"role": "user", "content": "新问题"},
+    ]
+
+
+def test_history_truncates_oversized_single_message():
+    conv = _conv_with(("user", "很" * 100))
+    history = build_history_messages(conv, max_chars=20)
+    assert len(history) == 1
+    assert history[0]["content"] == "很" * 20  # 保留开头
+    assert history[0]["role"] == "user"
+
+
+def test_history_ignores_unknown_roles():
+    conv = _conv_with(("user", "q"), ("system", "s"), ("assistant", "a"))
+    history = build_history_messages(conv, max_chars=10_000)
+    assert history == [
+        {"role": "user", "content": "q"},
+        {"role": "assistant", "content": "a"},
+    ]
 
 
 # ---- API 路由 ----

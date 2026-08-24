@@ -323,3 +323,37 @@ def json_loads(text: str) -> dict:
     import json
 
     return json.loads(text)
+
+
+# ---- C2 会话历史注入 ----
+
+def test_history_injected_into_planning_and_executing():
+    llm = MockLLM(
+        plan_content='{"steps": [{"title": "检索"}]}',
+        rounds=[LLMReply(content="答案")],
+    )
+    orch = ResearchOrchestrator(ToolRegistry([SearchTool()]), llm)
+    history = [
+        {"role": "user", "content": "前文问题"},
+        {"role": "assistant", "content": "前文答案"},
+    ]
+    task = ResearchTask(task_id="t_1", question="新问题")
+    asyncio.run(orch.run(task, None, history))
+
+    planning_messages = llm.calls[0][0]  # 第 1 次调用 = 规划
+    executing_messages = llm.calls[1][0]  # 第 2 次调用 = 执行
+    # history 紧跟 system 之后，最新问题始终在末尾
+    assert planning_messages[1:3] == history
+    assert planning_messages[-1] == {"role": "user", "content": "新问题"}
+    assert executing_messages[1:3] == history
+    assert executing_messages[-1] == {"role": "user", "content": "新问题"}
+
+
+def test_history_empty_keeps_original_layout():
+    llm = MockLLM(plan_content="", rounds=[LLMReply(content="答案")])
+    orch = ResearchOrchestrator(ToolRegistry([SearchTool()]), llm)
+    task = ResearchTask(task_id="t_1", question="问题")
+    asyncio.run(orch.run(task, None, []))
+
+    assert len(llm.calls[0][0]) == 2  # system + user，无多余消息
+    assert len(llm.calls[1][0]) == 2

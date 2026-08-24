@@ -16,6 +16,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
 from ..agent.local_tools import build_local_tools
+from ..conversations import append_message, build_history_messages, get_conversation
 from ..agent.models import ResearchScope, ResearchTask, make_event
 from ..agent.orchestrator import DeepSeekLLMClient, ResearchOrchestrator
 from ..agent.tools import ToolRegistry
@@ -60,6 +61,8 @@ async def create_research_task(request: Request):
         )
 
     scope_raw = payload.get("scope") if isinstance(payload.get("scope"), dict) else {}
+    conv_id = payload.get("conversationId")
+    conversation_id = conv_id.strip() if isinstance(conv_id, str) and conv_id.strip() else None
     task = ResearchTask(
         task_id="t_" + uuid.uuid4().hex[:8],
         question=question.strip(),
@@ -74,7 +77,7 @@ async def create_research_task(request: Request):
         enable_web=bool(payload.get("enable_web", False)),
     )
     return StreamingResponse(
-        _task_event_stream(task, build_orchestrator(task.enable_web)),
+        _task_event_stream(task, build_orchestrator(task.enable_web), conversation_id),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
@@ -86,18 +89,27 @@ def _stream_error(code: str, message: str) -> AsyncGenerator[str, None]:
 
 
 async def _task_event_stream(
-    task: ResearchTask, orchestrator: ResearchOrchestrator
+    task: ResearchTask,
+    orchestrator: ResearchOrchestrator,
+    conversation_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
-    """Orchestrator 事件 → SSE 帧：后台跑任务，queue 传事件，哨兵对象收尾。"""
+    """Orchestrator 事件 → SSE 帧：后台跑任务，queue 传事件，哨兵对象收尾。
+
+    会话写回（C2）：流结束后把 question + answer 追加到会话；
+    失败仅告警，不影响任务响应（append_message 对无效 id 静默返回 None）。
+    """
     queue: asyncio.Queue[Any] = asyncio.Queue()
     sentinel = object()
+    history = (
+        build_history_messages(get_conversation(conversation_id)) if conversation_id else []
+    )
 
     def emit(ev: dict[str, Any]) -> None:
         queue.put_nowait(ev)
 
     async def run_task() -> None:
         try:
-            await orchestrator.run(task, emit)
+            await orchestrator.run(task, emit, history)
         finally:
             queue.put_nowait(sentinel)
 
@@ -113,3 +125,16 @@ async def _task_event_stream(
         if not runner.done():
             runner.cancel()
         await asyncio.gather(runner, return_exceptions=True)
+        _persist_research(conversation_id, task)
+
+
+def _persist_research(conversation_id: str | None, task: ResearchTask) -> None:
+    """研究任务写回：user 总写，assistant 有答案才写（失败/无答案不污染历史）。"""
+    if not conversation_id:
+        return
+    try:
+        append_message(conversation_id, "user", task.question)
+        if task.answer:
+            append_message(conversation_id, "assistant", task.answer)
+    except Exception as exc:
+        print("会话写回失败（不影响任务响应）:", repr(exc))

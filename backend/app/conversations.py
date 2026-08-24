@@ -17,6 +17,40 @@ from pydantic import BaseModel
 
 from .vault import kb_root
 
+# 历史注入滑动窗口的字符预算（token 数不可精确预知，用字符数近似控制）
+DEFAULT_HISTORY_MAX_CHARS = 8000
+
+
+def build_history_messages(
+    conversation: Conversation | None, max_chars: int = DEFAULT_HISTORY_MAX_CHARS
+) -> list[dict[str, str]]:
+    """滑动窗口：取最近的 user/assistant 消息直到字符预算耗尽，按原顺序返回。
+
+    策略：窗口优先保留最近的完整消息，最老的超长消息整条丢弃；
+    仅当预算连一条消息都放不下时，才截断最近一条保留开头（保证上下文不空）。
+    system 消息不持久化、不参与窗口。
+    """
+    if conversation is None:
+        return []
+    result: list[dict[str, str]] = []
+    remaining = max_chars
+    for msg in reversed(conversation.messages):
+        if msg.role not in ("user", "assistant"):
+            continue
+        if remaining <= 0:
+            break
+        if len(msg.content) > remaining:
+            if result:
+                break  # 已有更近消息：最老的超长消息整条丢弃
+            msg_text = msg.content[:remaining]  # 单条超预算：截断保底
+            remaining = 0
+        else:
+            msg_text = msg.content
+            remaining -= len(msg_text)
+        result.append({"role": msg.role, "content": msg_text})
+    result.reverse()
+    return result
+
 
 class Message(BaseModel):
     """会话内单条消息；system 不持久化（C2 注入时临时构造）。"""
