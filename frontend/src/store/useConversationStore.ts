@@ -5,6 +5,7 @@ import {
     createConversation,
     deleteConversation,
     getConversationMessages,
+    updateConversationTitle,
 } from '@/services/conversations'
 
 /**
@@ -46,8 +47,13 @@ interface ConversationState {
     clearError: () => void
 }
 
-/** 首条用户消息自动生成标题（后端 C1 无标题更新接口，展示层本地维护） */
+/** 首条用户消息自动生成标题（截断 + 省略号；标题语义由前端决定，后端只持久化） */
 const TITLE_FROM_MESSAGE_LEN = 20
+
+function makeTitle(content: string): string {
+    const text = content.trim()
+    return text.slice(0, TITLE_FROM_MESSAGE_LEN) + (text.length > TITLE_FROM_MESSAGE_LEN ? '…' : '')
+}
 
 function localId(prefix: string): string {
     localSeq += 1
@@ -142,17 +148,28 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     },
 
     appendMessage: (convId, msg) => {
+        // 首条用户消息 → 生成标题：真模式下持久化到后端（PUT，幂等：标题非默认后不再触发），
+        // 本地同步更新保证 UI 即时；PUT 失败静默降级（console 留痕，标题仅本次会话内有效）。
+        if (msg.role === 'user' && msg.content.trim()) {
+            const state = get()
+            const conv = state.conversations.find((c) => c.id === convId)
+            if (conv && (!conv.title || conv.title === '新对话')) {
+                const title = makeTitle(msg.content)
+                if (state.backendOk) {
+                    void updateConversationTitle(convId, title).catch((e) =>
+                        console.warn('会话标题持久化失败:', e)
+                    )
+                }
+            }
+        }
         set((s) => {
             const list = s.messagesByConv[convId] ?? []
             const nextList = [...list, msg]
-            // 首条用户消息自动生成标题（前端展示层，后端无更新接口）
             let conversations = s.conversations
             if (msg.role === 'user' && msg.content.trim()) {
                 const conv = conversations.find((c) => c.id === convId)
                 if (conv && (!conv.title || conv.title === '新对话')) {
-                    const title =
-                        msg.content.trim().slice(0, TITLE_FROM_MESSAGE_LEN) +
-                        (msg.content.trim().length > TITLE_FROM_MESSAGE_LEN ? '…' : '')
+                    const title = makeTitle(msg.content)
                     conversations = conversations.map((c) =>
                         c.id === convId ? { ...c, title } : c
                     )

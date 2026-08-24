@@ -59,6 +59,15 @@ export const deleteConversation = async (id: string): Promise<void> => {
     })
 }
 
+/** 更新会话标题（C3 标题持久化；后端 strip 校验 + 幂等——title 未变不写盘） */
+export const updateConversationTitle = async (id: string, title: string): Promise<void> => {
+    await request<{ ok: boolean }>(`${BASE_URL}/api/conversations/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+    })
+}
+
 export const getConversationMessages = async (
     id: string
 ): Promise<ConversationMessage[]> => {
