@@ -10,6 +10,7 @@ anyio.to_thread 包一层，避免阻塞事件循环（由调用方决定调度�
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from langchain_chroma import Chroma
@@ -81,7 +82,11 @@ _collection: Chroma | None = None
 
 
 def get_collection() -> Chroma:
-    """懒加载单例：首次调用才建立 Chroma 持久化连接 + embedding 客户端。"""
+    """懒加载单例：首次调用才建立 Chroma 持久化连接 + embedding 客户端。
+
+    索引损坏（HNSW 文件损坏）时 Chroma 构造会抛异常——这是 P3 自愈的检测点，
+    indexer.scan_and_index 用它探测库健康。
+    """
     global _collection
     if _collection is None:
         _collection = Chroma(
@@ -90,6 +95,18 @@ def get_collection() -> Chroma:
             persist_directory=str(chroma_dir()),
         )
     return _collection
+
+
+def heal_collection() -> None:
+    """索引自愈：删除整个 chroma_db 并清空单例（.kb 可重建，删库无损）。
+
+    调用方（indexer）随后应 force 全量重扫重建索引；
+    若删库后仍无法构造，说明是 embedding 配置问题而非索引损坏，交由上层报错。
+    """
+    global _collection
+    _collection = None
+    shutil.rmtree(chroma_dir(), ignore_errors=True)
+    print(f"[self-heal] chroma 索引已删除，等待全量重建（{chroma_dir()}）")
 
 
 def extract_pdf_pages(pdf_path: str | Path) -> list[str]:

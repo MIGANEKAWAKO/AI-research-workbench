@@ -72,18 +72,33 @@ def _rel_to_vault(path: Path, vault: Path) -> str:
 
 
 def scan_and_index(force: bool = False) -> dict[str, Any]:
-    """全量/增量扫描 vault 并维护索引，返回报告。"""
+    """全量/增量扫描 vault 并维护索引，返回报告。
+
+    P3 自愈：开头探测库健康（HNSW 损坏时 get_collection 构造抛异常），
+    失败 → 删库 + 强制全量重建；heal 后跳过旧块清理（库已删，无块可清）。
+    """
     vault = default_vault_path()
     report = {"scanned": 0, "indexed": 0, "deleted": 0, "skipped": 0,
               "errors": [], "totalChunks": 0}
+
+    healed = False
+    try:
+        kb.get_collection()
+    except Exception as exc:
+        print(f"[self-heal] chroma 索引加载失败（{exc!r}），自动重建")
+        kb.heal_collection()
+        healed = True
+        force = True
+
     state = _load_state()
 
     # force：按旧 state 全部清理，再全量重建（解决 state 损坏/索引逻辑升级）
     if force:
-        for doc_type, items in (("note", state["note"]), ("paper", state["paper"])):
-            for rel, info in items.items():
-                doc_id = info.get("docId") or rel[:-3]
-                kb.delete_document(doc_id)
+        if not healed:
+            for doc_type, items in (("note", state["note"]), ("paper", state["paper"])):
+                for rel, info in items.items():
+                    doc_id = info.get("docId") or rel[:-3]
+                    kb.delete_document(doc_id)
         state = {"lastScan": "", "note": {}, "paper": {}}
 
     # ---- 笔记侧：glob vault/笔记/*.md ----
