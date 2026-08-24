@@ -18,6 +18,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
+from .caching import TTLCache
 from .config import settings
 from .vault import chroma_dir
 
@@ -28,15 +29,52 @@ COLLECTION_NAME = "literature"
 # 分隔符含中文标点：英文默认分隔符会把中文句子切碎，块边界落在句号处
 SPLIT_SEPARATORS = ["\n\n", "\n", "。", "！", "？", "；", "，", " ", ""]
 
+# X1 缓存参数：embedding 确定性（同 query 同向量），TTL 长且无需事件失效；
+# 检索结果依赖知识库内容，TTL 短 + upsert/delete 时显式失效双保险
+EMBEDDING_CACHE_CAPACITY = 512
+EMBEDDING_CACHE_TTL_SECONDS = 86400  # 24h
+RETRIEVE_CACHE_CAPACITY = 128
+RETRIEVE_CACHE_TTL_SECONDS = 60
+
+
+class CachedEmbeddings(OpenAIEmbeddings):
+    """embed_query 结果缓存：重复 query 不重打 SiliconFlow API（确定性，无需失效）。"""
+
+    def __init__(self, cache: TTLCache, **kwargs):
+        super().__init__(**kwargs)
+        self._cache = cache
+
+    def embed_query(self, text: str) -> list[float]:
+        cached = self._cache.get(text)
+        if cached is not None:
+            return cached
+        vector = super().embed_query(text)
+        self._cache.set(text, vector, ttl_seconds=EMBEDDING_CACHE_TTL_SECONDS)
+        return vector
+
 
 def _get_embeddings() -> OpenAIEmbeddings:
     if not settings.siliconflow_api_key:
         raise RuntimeError("未配置 SILICONFLOW_API_KEY，无法初始化知识库（见 .env）")
-    return OpenAIEmbeddings(
+    return CachedEmbeddings(
+        _embedding_cache,
         model=settings.embedding_model,
         api_key=settings.siliconflow_api_key,
         base_url=settings.siliconflow_base_url,
     )
+
+
+_embedding_cache = TTLCache(capacity=EMBEDDING_CACHE_CAPACITY)
+_retrieve_cache = TTLCache(capacity=RETRIEVE_CACHE_CAPACITY)
+
+
+def invalidate_retrieve_cache() -> None:
+    """检索结果缓存失效：知识库内容变化（upsert/delete）后调用。
+
+    挂在这里覆盖所有写库路径（indexer 扫描、文献导入/删除都经此两函数），
+    避免大改库后短暂返回脏结果（短 TTL 只是兜底）。
+    """
+    _retrieve_cache.clear()
 
 
 _collection: Chroma | None = None
@@ -76,6 +114,7 @@ def split_pages(pages: list[str]) -> list[Document]:
 
 
 def upsert_document(
+
     doc_type: str,
     doc_id: str,
     title: str,
@@ -88,6 +127,7 @@ def upsert_document(
     """
     if doc_type not in ("note", "paper"):
         raise ValueError(f"doc_type 只能是 note/paper，收到 {doc_type!r}")
+    invalidate_retrieve_cache()
     if pages is None:
         pages = [text or ""]
     chunks = split_pages(pages)
@@ -104,13 +144,24 @@ def upsert_document(
 
 
 def delete_document(doc_id: str) -> None:
+    invalidate_retrieve_cache()
     get_collection().delete(where={"docId": doc_id})
 
 
 def retrieve(query: str, doc_id: str | None = None, top_k: int = 5) -> list[Document]:
-    """相似度检索；doc_id 指定时按单篇限定（where 过滤），默认全局检索。"""
+    """相似度检索；doc_id 指定时按单篇限定（where 过滤），默认全局检索。
+
+    X1：结果缓存（短 TTL 60s + upsert/delete 显式失效双保险）；
+    返回缓存内的 Document 引用，调用方只读（rag / local_tools 均只读）。
+    """
+    cache_key = f"retrieve:{query}|{doc_id or ''}|{top_k}"
+    cached = _retrieve_cache.get(cache_key)
+    if cached is not None:
+        return cached
     filter_dict = {"docId": doc_id} if doc_id else None
-    return get_collection().similarity_search(query, k=top_k, filter=filter_dict)
+    docs = get_collection().similarity_search(query, k=top_k, filter=filter_dict)
+    _retrieve_cache.set(cache_key, docs, ttl_seconds=RETRIEVE_CACHE_TTL_SECONDS)
+    return docs
 
 
 if __name__ == "__main__":  # CLI：python -m app.kb <upsert|query|delete> ...

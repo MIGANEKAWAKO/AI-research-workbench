@@ -32,6 +32,9 @@ class Settings:
     # A5 vault 变更监听：watchdog 启动失败或 CI 测试可置 0 关闭（降级为前端轮询）
     watch_enabled: bool = os.getenv("WATCH_ENABLED", "1") == "1"
 
+    # X1 本地缓存：redis_url 留配置位（未来多进程部署可选启用；第一版内存/磁盘缓存已够，不使用）
+    redis_url: str = os.getenv("REDIS_URL", "")
+
 
 settings = Settings()
 

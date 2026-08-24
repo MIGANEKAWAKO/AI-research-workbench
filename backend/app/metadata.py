@@ -12,6 +12,9 @@ from typing import Any, Literal
 import httpx
 from bs4 import BeautifulSoup
 
+from .caching import MetadataDiskCache
+from .vault import kb_root
+
 CROSSREF_API = "https://api.crossref.org/works"
 ARXIV_API = "https://export.arxiv.org/api/query"
 REQUEST_TIMEOUT = 10.0
@@ -66,14 +69,29 @@ def detect_id_type(identifier: str) -> Literal["doi", "arxiv", "none"]:
     return "none"
 
 
+# X1：磁盘 TTL 缓存（7 天），重复 DOI/arXiv 补全不重打网络
+_metadata_cache = MetadataDiskCache(kb_root() / "metadata_cache.json")
+
+
 async def fetch_metadata(identifier: str) -> dict[str, Any]:
-    """统一入口：自动识别类型并补全，失败返回 {}。"""
+    """统一入口：自动识别类型并补全，失败返回 {}。
+
+    X1：命中磁盘缓存直接返回；**失败结果（{}）不缓存**，
+    否则 Crossref 临时故障会把空结果钉住 7 天。
+    """
+    cached = _metadata_cache.get(identifier)
+    if cached is not None:
+        return cached
     id_type = detect_id_type(identifier)
     if id_type == "doi":
-        return await fetch_by_doi(identifier)
-    if id_type == "arxiv":
-        return await fetch_by_arxiv(identifier)
-    return {}
+        result = await fetch_by_doi(identifier)
+    elif id_type == "arxiv":
+        result = await fetch_by_arxiv(identifier)
+    else:
+        return {}
+    if result:
+        _metadata_cache.set(identifier, result)
+    return result
 
 
 async def fetch_by_doi(doi: str) -> dict[str, Any]:
