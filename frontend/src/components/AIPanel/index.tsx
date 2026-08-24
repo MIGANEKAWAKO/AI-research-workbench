@@ -441,7 +441,7 @@ const AIPanel = () => {
             </div>
 
             {/* M2 C3：会话栏——当前会话切换（下拉）+ 新建（研究任务运行中禁用） */}
-            <div className='flex items-center gap-1.5 border-b border-border px-4 py-1.5'>
+            <div className='flex shrink-0 items-center gap-1.5 border-b border-border px-4 py-1.5'>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button
@@ -509,7 +509,7 @@ const AIPanel = () => {
             {/* F7：问答范围指示条（单篇 = 正在阅读的文献；否则全局） */}
             <div
                 className={cn(
-                    'border-b px-4 py-1.5 text-xs',
+                    'shrink-0 border-b px-4 py-1.5 text-xs',
                     readerEntry
                         ? 'border-warning/20 bg-warning/10 text-warning'
                         : 'border-border bg-background text-muted-foreground'
@@ -525,8 +525,9 @@ const AIPanel = () => {
                 )}
             </div>
 
-            {/* 消息区（设计稿 ai-messages：who 方块 + 气泡） */}
-            <ScrollArea className='flex-1'>
+            {/* 消息区（设计稿 ai-messages：who 方块 + 气泡）
+                min-h-0：flex 子项收缩（消息再多也不撑破，输入区固定在底部） */}
+            <ScrollArea className='min-h-0 flex-1'>
                 <div className='flex flex-col gap-3.5 p-4'>
                     {/* A6：研究任务进度区（过程展示；答案进消息流） */}
                     {researchMode && researchState && <ResearchTaskView state={researchState} />}

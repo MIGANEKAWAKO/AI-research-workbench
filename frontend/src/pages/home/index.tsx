@@ -32,10 +32,11 @@ const Home = () => {
         useDataStore.getState().loadAll()
     }, [])
 
-    // F4：进入文献模式时加载文献列表（后端 literature.json）
+    // F4：进入文献模式时加载文献列表 + 集合定义（后端 literature.json + 前端 .kb/literature-collections.json）
     useEffect(() => {
         if (view === 'library') {
             useLiteratureStore.getState().load()
+            void useLiteratureStore.getState().loadCollections()
         }
     }, [view])
 
@@ -112,7 +113,9 @@ const Home = () => {
                         <ResizablePanelGroup className="flex-1">
                             {/* 中间面板：笔记模式 → 编辑器；文献模式 → 阅读器（F5）或详情（F4） */}
                             <ResizablePanel defaultSize={70} minSize={30}>
-                                <main className="flex-1 flex flex-col min-w-0 bg-background relative">
+                                {/* min-h-0：flex 子项默认 min-height:auto，内容会撑破容器
+                                    （AI 面板消息区/编辑器滚动失效、输入区被挤到页面底部） */}
+                                <main className="flex min-h-0 flex-1 flex-col min-w-0 bg-background relative">
                                     {view === 'library' ? (
                                         showUpload ? (
                                             <UploadView />
