@@ -10,6 +10,7 @@ state 文件 .kb/index_state.json 记录每个已索引文件的时间戳与块�
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,8 @@ from . import kb
 from .frontmatter import parse_frontmatter
 from .literature import load_literature
 from .vault import default_vault_path, kb_root
+
+logger = logging.getLogger("indexer")
 
 NOTE_DIR = "笔记"
 INDEX_STATE_FILE = "index_state.json"
@@ -40,7 +43,7 @@ def _load_state() -> dict[str, Any]:
             "paper": data.get("paper", {}),
         }
     except (json.JSONDecodeError, TypeError, ValueError):
-        print(f"警告: {path} 解析失败，按空状态处理（将全量重建）")
+        logger.warning("index_state 解析失败，按空状态处理（将全量重建）: %s", path)
         return {"lastScan": "", "note": {}, "paper": {}}
 
 
@@ -85,7 +88,7 @@ def scan_and_index(force: bool = False) -> dict[str, Any]:
     try:
         kb.get_collection()
     except Exception as exc:
-        print(f"[self-heal] chroma 索引加载失败（{exc!r}），自动重建")
+        logger.error("chroma 索引加载失败，自动重建: %r", exc)
         kb.heal_collection()
         healed = True
         force = True

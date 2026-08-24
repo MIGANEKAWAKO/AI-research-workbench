@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import queue
 import threading
 import time
@@ -25,6 +26,8 @@ from watchdog.observers import Observer
 from .events import broker
 from .indexer import scan_and_index
 from .vault import default_vault_path
+
+logger = logging.getLogger("watcher")
 
 # 忽略：原子写临时文件、Office 锁文件、git 内部
 _IGNORE_SUFFIXES = (".tmp", ".swp", "~")
@@ -131,9 +134,9 @@ class VaultWatcher:
                     recursive=True,
                 )
                 self._observed.add(watch_dir)
-                print(f"watchdog: 开始监听 {watch_dir}")
+                logger.info("watchdog 开始监听: %s", watch_dir)
             except Exception as exc:
-                print(f"watchdog: 监听 {watch_dir} 失败（继续轮询兜底）: {exc!r}")
+                logger.warning("watchdog 监听 %s 失败（继续轮询兜底）: %r", watch_dir, exc)
 
     async def _rescan_and_broadcast(self) -> None:
         try:
@@ -151,7 +154,7 @@ class VaultWatcher:
                 }
             )
         except Exception as exc:
-            print("watchdog 重扫失败（仍广播通知前端刷新）:", repr(exc))
+            logger.error("watchdog 重扫失败（仍广播通知前端刷新）: %r", exc)
             broker.publish(
                 {
                     "type": "vault.changed",

@@ -8,7 +8,9 @@ LLM 客户端可注入（LLMClient Protocol），测试用 Mock 全链路驱动�
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
@@ -25,6 +27,8 @@ from .models import (
 )
 from .prompts import PLANNER_SYSTEM_PROMPT, RESEARCHER_SYSTEM_PROMPT
 from .tools import ToolRegistry
+
+logger = logging.getLogger("orchestrator")
 
 DEFAULT_MAX_STEPS = 5
 DEFAULT_MAX_TOOL_CALLS = 8
@@ -248,7 +252,15 @@ class ResearchOrchestrator:
                         "tool.call", step_id=step.step_id, tool=tc.name, arguments=tc.arguments
                     )
                 )
+                started = time.monotonic()
                 result = await self.registry.run(tc.name, tc.arguments)
+                logger.info(
+                    "tool 执行完成 task=%s tool=%s ok=%s 耗时=%.2fs",
+                    task.task_id,
+                    tc.name,
+                    result.ok,
+                    time.monotonic() - started,
+                )
                 step.tool_calls.append(result)
                 emit(
                     make_event(

@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import time
 import uuid
 from typing import Any, AsyncGenerator
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
+
+logger = logging.getLogger("research")
 
 from ..agent.local_tools import build_local_tools
 from ..conversations import append_message, build_history_messages, get_conversation
@@ -76,6 +80,12 @@ async def create_research_task(request: Request):
         ),
         enable_web=bool(payload.get("enable_web", False)),
     )
+    logger.info(
+        "research 任务创建 task=%s question_len=%d enable_web=%s",
+        task.task_id,
+        len(task.question),
+        task.enable_web,
+    )
     return StreamingResponse(
         _task_event_stream(task, build_orchestrator(task.enable_web), conversation_id),
         media_type="text/event-stream",
@@ -100,6 +110,7 @@ async def _task_event_stream(
     """
     queue: asyncio.Queue[Any] = asyncio.Queue()
     sentinel = object()
+    started = time.monotonic()
     history = (
         build_history_messages(get_conversation(conversation_id)) if conversation_id else []
     )
@@ -126,6 +137,15 @@ async def _task_event_stream(
             runner.cancel()
         await asyncio.gather(runner, return_exceptions=True)
         _persist_research(conversation_id, task)
+        logger.info(
+            "research 任务结束 task=%s status=%s answer_len=%d 耗时=%.2fs",
+            task.task_id,
+            task.status.value,
+            len(task.answer or ""),
+            time.monotonic() - started,
+        )
+        if task.error:
+            logger.error("research 任务失败 task=%s error=%s", task.task_id, task.error)
 
 
 def _persist_research(conversation_id: str | None, task: ResearchTask) -> None:
@@ -137,4 +157,4 @@ def _persist_research(conversation_id: str | None, task: ResearchTask) -> None:
         if task.answer:
             append_message(conversation_id, "assistant", task.answer)
     except Exception as exc:
-        print("会话写回失败（不影响任务响应）:", repr(exc))
+        logger.warning("会话写回失败（不影响任务响应）: %r", exc)

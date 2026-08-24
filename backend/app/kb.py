@@ -10,6 +10,7 @@ anyio.to_thread 包一层，避免阻塞事件循环（由调用方决定调度�
 
 from __future__ import annotations
 
+import logging
 import shutil
 from pathlib import Path
 
@@ -22,6 +23,8 @@ from pypdf import PdfReader
 from .caching import TTLCache
 from .config import settings
 from .vault import chroma_dir
+
+logger = logging.getLogger("kb")
 
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
@@ -106,7 +109,7 @@ def heal_collection() -> None:
     global _collection
     _collection = None
     shutil.rmtree(chroma_dir(), ignore_errors=True)
-    print(f"[self-heal] chroma 索引已删除，等待全量重建（{chroma_dir()}）")
+    logger.warning("chroma 索引已删除，等待全量重建: %s", chroma_dir())
 
 
 def extract_pdf_pages(pdf_path: str | Path) -> list[str]:

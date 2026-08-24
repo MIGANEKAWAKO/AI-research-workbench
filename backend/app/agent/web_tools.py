@@ -9,9 +9,12 @@ provider 为 None 时 web_search 工具仍注册（模型可见），执行返�
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger("web_tools")
 
 from ..config import settings
 from .models import ToolResult
@@ -80,5 +83,7 @@ def build_web_provider() -> WebSearchProvider | None:
     if not settings.web_search_provider:
         return None
     # 第一版无内置供应商：配置了名称但未实现时也返回 None，避免假实现
-    print(f"警告: 联网搜索供应商 {settings.web_search_provider!r} 尚未接入，web_search 将降级失败")
+    logger.warning(
+        "联网搜索供应商 %r 尚未接入，web_search 将降级失败", settings.web_search_provider
+    )
     return None

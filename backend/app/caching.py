@@ -12,12 +12,15 @@ redis_url 配置位已留在 config.py（未来多进程部署可选启用），
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("cache")
 
 DEFAULT_TTL_CAPACITY = 512
 DEFAULT_DISK_MAX_ENTRIES = 1000
@@ -50,7 +53,7 @@ class TTLCache:
                 return None
             self._data.move_to_end(key)
             self.hits += 1
-            print(f"[cache] hit: {key[:60]}")
+            logger.info("缓存命中: %s", key[:60])
             return value
 
     def set(self, key: str, value: Any, ttl_seconds: float | None = None) -> None:
@@ -90,7 +93,7 @@ class MetadataDiskCache:
             data = json.loads(self._path.read_text(encoding="utf-8"))
             return data if isinstance(data, dict) else {}
         except (json.JSONDecodeError, TypeError, ValueError):
-            print(f"警告: {self._path} 解析失败，按空缓存处理（.kb 可重建）")
+            logger.warning("缓存文件解析失败，按空缓存处理（.kb 可重建）: %s", self._path)
             return {}
 
     def get(self, identifier: str) -> dict[str, Any] | None:
@@ -101,7 +104,7 @@ class MetadataDiskCache:
             if time.time() - item.get("fetched_at", 0) > self._ttl_seconds:
                 del self._data[identifier]
                 return None
-            print(f"[cache] hit: {identifier}")
+            logger.info("缓存命中: %s", identifier)
             return item.get("data")
 
     def set(self, identifier: str, data: dict[str, Any]) -> None:

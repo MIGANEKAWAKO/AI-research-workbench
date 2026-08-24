@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 from datetime import datetime
@@ -26,6 +27,8 @@ from ..literature import (
     update_entry,
 )
 from ..vault import default_vault_path
+
+logger = logging.getLogger("documents")
 
 router = APIRouter()
 
@@ -110,9 +113,9 @@ async def import_document(
             auto_doi = metadata.extract_doi("\n".join(pages[:2]))
             if auto_doi:
                 identifier = auto_doi
-                print(f"自动提取 DOI: {auto_doi}")
+                logger.info("自动提取 DOI: %s", auto_doi)
         except Exception as exc:
-            print("DOI 自动提取失败（已降级，title 将用文件名占位）:", repr(exc))
+            logger.warning("DOI 自动提取失败（已降级，title 将用文件名占位）: %r", exc)
 
     meta: dict = await metadata.fetch_metadata(identifier) if identifier else {}
 
@@ -149,9 +152,9 @@ async def import_document(
         try:
             indexer.mark_paper_indexed(pdf_rel, lit_id, chunks)
         except Exception as exc:
-            print("index_state 同步失败（不影响导入）:", repr(exc))
+            logger.warning("index_state 同步失败（不影响导入）: %r", exc)
     except Exception as exc:
-        print("文献索引失败（已降级）:", repr(exc))
+        logger.warning("文献索引失败（已降级）: %r", exc)
 
     # 6. 入库（原子写）
     add_entry(entry)
@@ -221,13 +224,13 @@ def delete_document(lit_id: str):
     try:
         kb.delete_document(lit_id)
     except Exception as exc:
-        print("索引清理失败（已降级）:", repr(exc))
+        logger.warning("索引清理失败（已降级）: %r", exc)
 
     # 2.5 T2 修复：同步移除 index_state 记录（避免 kb/status 虚高）
     try:
         indexer.unmark_paper_indexed(entry.pdfPath)
     except Exception as exc:
-        print("index_state 清理失败（已降级）:", repr(exc))
+        logger.warning("index_state 清理失败（已降级）: %r", exc)
 
     # 3. json 移除
     remove_entry(lit_id)

@@ -5,6 +5,9 @@ import json
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Dict, List
 
+import logging
+import time
+
 import anyio
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +17,9 @@ from openai import AsyncOpenAI
 from .config import settings
 from .conversations import append_message, build_history_messages, get_conversation
 from .indexer import scan_and_index
+from .log import setup_logging
+
+logger = logging.getLogger("app")
 from .prompts import (
     AI_ERROR_MESSAGE,
     INVALID_TASK_ERROR,
@@ -30,12 +36,14 @@ from .rag import build_rag_context
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动自动扫描索引（失败不阻断启动，打印警告即可）
+    setup_logging()
+    logger.info("后端启动")
+    # 启动自动扫描索引（P3 自愈内建：损坏自动删库重建；失败不阻断启动）
     try:
         await anyio.to_thread.run_sync(scan_and_index)
-        print("启动索引扫描完成")
+        logger.info("启动索引扫描完成")
     except Exception as exc:
-        print("启动索引扫描失败（继续启动）:", repr(exc))
+        logger.error("启动索引扫描失败（继续启动）: %r", exc)
 
     # A5：watchdog 监听 vault 变更 → 增量重扫 → SSE 广播；失败降级为前端 30s 轮询
     watcher = None
@@ -44,10 +52,11 @@ async def lifespan(app: FastAPI):
             watcher = VaultWatcher()
             watcher.start(asyncio.get_running_loop())
         except Exception as exc:
-            print("watchdog 启动失败（降级为前端轮询）:", repr(exc))
+            logger.warning("watchdog 启动失败（降级为前端轮询）: %r", exc)
     yield
     if watcher is not None:
         watcher.stop()
+    logger.info("后端关闭")
 
 
 app = FastAPI(title="AI Note Server", lifespan=lifespan)
@@ -101,7 +110,7 @@ def _persist_chat(conversation_id: str | None, user_text: str, assistant_text: s
         if assistant_text:
             append_message(conversation_id, "assistant", assistant_text)
     except Exception as exc:
-        print("会话写回失败（不影响响应）:", repr(exc))
+        logger.warning("会话写回失败（不影响响应）: %r", exc)
 
 
 async def _build_messages(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -184,6 +193,7 @@ async def _stream_chat_completion(
 
     client = None
     accumulated: List[str] = []
+    started = time.monotonic()
     try:
         client = AsyncOpenAI(
             api_key=settings.deepseek_api_key,
@@ -205,7 +215,7 @@ async def _stream_chat_completion(
                 accumulated.append(content)
                 yield _sse_data({"content": content})
     except Exception as exc:  # pragma: no cover - runtime integration path
-        print("DeepSeek API Error:", repr(exc))
+        logger.error("DeepSeek API 错误: %r", exc)
         yield _sse_data({"error": AI_ERROR_MESSAGE})
     finally:
         try:
@@ -213,7 +223,15 @@ async def _stream_chat_completion(
                 await client.close()
         except Exception:
             pass
-        _persist_chat(conversation_id, user_text, "".join(accumulated))
+        answer = "".join(accumulated)
+        _persist_chat(conversation_id, user_text, answer)
+        # 耗时/长度日志，不记对话内容（隐私约定）
+        logger.info(
+            "chat 完成 耗时=%.2fs 输出字符=%d conv=%s",
+            time.monotonic() - started,
+            len(answer),
+            conversation_id or "-",
+        )
 
 
 async def _stream_error(error_message: str) -> AsyncGenerator[str, None]:

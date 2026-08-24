@@ -7,12 +7,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 
 from pydantic import BaseModel
 
 from .vault import kb_root
+
+logger = logging.getLogger("literature")
 
 
 class LiteratureEntry(BaseModel):
@@ -57,7 +60,7 @@ def load_literature() -> list[LiteratureEntry]:
         data = json.loads(path.read_text(encoding="utf-8"))
         return [LiteratureEntry(**item) for item in data]
     except (json.JSONDecodeError, TypeError, ValueError):
-        print(f"警告: {path} 解析失败，按空库处理（.kb 可由后端重建）")
+        logger.warning("literature.json 解析失败，按空库处理（.kb 可由后端重建）: %s", path)
         return []
 
 

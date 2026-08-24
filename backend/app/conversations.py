@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from datetime import datetime
@@ -16,6 +17,8 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from .vault import kb_root
+
+logger = logging.getLogger("conversations")
 
 # 历史注入滑动窗口的字符预算（token 数不可精确预知，用字符数近似控制）
 DEFAULT_HISTORY_MAX_CHARS = 8000
@@ -96,7 +99,7 @@ def load_conversations() -> list[Conversation]:
         data = json.loads(path.read_text(encoding="utf-8"))
         return [Conversation(**item) for item in data]
     except (json.JSONDecodeError, TypeError, ValueError):
-        print(f"警告: {path} 解析失败，按空库处理（.kb 可由后端重建）")
+        logger.warning("conversations.json 解析失败，按空库处理（.kb 可由后端重建）: %s", path)
         return []
 
 
