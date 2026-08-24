@@ -15,16 +15,24 @@ from ..conversations import (
     delete_conversation,
     get_conversation,
     load_conversations,
+    update_conversation_title,
 )
 
 router = APIRouter()
 
 VALID_SOURCES = ("chat", "research")
+MAX_TITLE_LEN = 100
 
 
 class CreateConversationRequest(BaseModel):
     title: str = ""
     source: str = "chat"
+
+
+class UpdateTitleRequest(BaseModel):
+    """标题更新：strip 后非空、限长；空/超长由路由拒绝（400）。"""
+
+    title: str
 
 
 def _summary(conv: Conversation) -> dict:
@@ -63,6 +71,23 @@ def get_messages(conv_id: str):
     if conv is None:
         raise HTTPException(status_code=404, detail="会话不存在")
     return {"messages": [msg.model_dump() for msg in conv.messages]}
+
+
+@router.put("/{conv_id}")
+def update_title(conv_id: str, req: UpdateTitleRequest):
+    """更新会话标题（C3 持久化：前端首条消息后自动生成并落盘）。
+
+    title 未变时幂等（不写盘）；空/超长 400；会话不存在 404。
+    """
+    title = req.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="标题不能为空")
+    if len(title) > MAX_TITLE_LEN:
+        raise HTTPException(status_code=400, detail=f"标题过长（最多 {MAX_TITLE_LEN} 字）")
+    conv = update_conversation_title(conv_id, title)
+    if conv is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return conv.model_dump()
 
 
 @router.delete("/{conv_id}")

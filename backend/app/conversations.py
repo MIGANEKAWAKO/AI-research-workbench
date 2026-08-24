@@ -162,3 +162,22 @@ def append_message(conv_id: str, role: str, content: str) -> Conversation | None
             break
     save_conversations(conversations)
     return conv
+
+
+def update_conversation_title(conv_id: str, title: str) -> Conversation | None:
+    """更新会话标题并刷新 updatedAt；title 未变时幂等（不写盘）；会话不存在返回 None。"""
+    conv = get_conversation(conv_id)
+    if conv is None:
+        return None
+    title = title.strip()
+    if conv.title == title:
+        return conv
+    conv.title = title
+    conv.updated_at = _now()
+    conversations = load_conversations()
+    for i, item in enumerate(conversations):
+        if item.id == conv_id:
+            conversations[i] = conv
+            break
+    save_conversations(conversations)
+    return conv
