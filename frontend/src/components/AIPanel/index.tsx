@@ -15,6 +15,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { fetchAiResponse, type AiTaskType } from '@/services/ai'
 import { ASK_INSTRUCTIONS } from '@/lib/ai-instructions'
+import ReactMarkdown from 'react-markdown'
 import { fetchResearchTask } from '@/services/research'
 import ResearchTaskView from './ResearchTaskView'
 import type { ResearchEvent, ResearchTaskState } from '@/types/research'
@@ -548,15 +549,70 @@ const AIPanel = () => {
                             >
                                 {msg.role === 'user' ? '我' : 'AI'}
                             </div>
+                            {/* 消息气泡：ReactMarkdown 渲染（AI 回答含加粗/列表/代码块等格式） */}
                             <div
                                 className={cn(
-                                    'max-w-[85%] rounded-xl px-3 py-2.5 text-[13.5px] leading-relaxed break-words whitespace-pre-wrap',
+                                    'max-w-[85%] rounded-xl px-3 py-2.5 text-[13.5px] leading-relaxed break-words',
                                     msg.role === 'user'
                                         ? 'rounded-tr-[3px] bg-primary text-primary-foreground'
                                         : 'rounded-tl-[3px] bg-muted text-foreground'
                                 )}
                             >
-                                {msg.content}
+                                <ReactMarkdown
+                                    components={{
+                                        p: ({ children }) => (
+                                            <p className='mb-1.5 last:mb-0'>{children}</p>
+                                        ),
+                                        strong: ({ children }) => (
+                                            <strong className='font-semibold'>{children}</strong>
+                                        ),
+                                        em: ({ children }) => <em>{children}</em>,
+                                        a: ({ children, href }) => (
+                                            <a
+                                                href={href}
+                                                target='_blank'
+                                                rel='noreferrer'
+                                                className='underline underline-offset-2 opacity-80 hover:opacity-100'
+                                            >
+                                                {children}
+                                            </a>
+                                        ),
+                                        ul: ({ children }) => (
+                                            <ul className='mb-1.5 list-disc space-y-0.5 pl-4 last:mb-0'>
+                                                {children}
+                                            </ul>
+                                        ),
+                                        ol: ({ children }) => (
+                                            <ol className='mb-1.5 list-decimal space-y-0.5 pl-4 last:mb-0'>
+                                                {children}
+                                            </ol>
+                                        ),
+                                        li: ({ children }) => <li>{children}</li>,
+                                        // 块级代码：语言类名存在（pre > code.language-*）
+                                        code: ({ className, children }) =>
+                                            className ? (
+                                                <code
+                                                    className={cn(
+                                                        'block overflow-x-auto rounded-md bg-black/10 p-2 font-mono text-[12.5px]',
+                                                        className
+                                                    )}
+                                                >
+                                                    {children}
+                                                </code>
+                                            ) : (
+                                                <code className='rounded bg-black/10 px-1 py-0.5 font-mono text-[12px]'>
+                                                    {children}
+                                                </code>
+                                            ),
+                                        pre: ({ children }) => (
+                                            <pre className='my-1.5 rounded-md bg-black/10 p-2 last:mb-0'>
+                                                {children}
+                                            </pre>
+                                        ),
+                                    }}
+                                >
+                                    {msg.content}
+                                </ReactMarkdown>
                                 {msg.id === typingMessageId && msg.content && (
                                     <span className='ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-foreground/60' />
                                 )}

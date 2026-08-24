@@ -136,7 +136,7 @@ const Home = () => {
                                     <ResizablePanel
                                         defaultSize={240}
                                         minSize={120}
-                                        maxSize={360}
+                                        maxSize={50}
                                         className="transition-all duration-300 ease-in-out"
                                     >
                                         <AIPanel />

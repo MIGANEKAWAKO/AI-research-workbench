@@ -4,7 +4,6 @@ import {
     Folder,
     FolderInput,
     FolderOpen,
-    FolderPlus,
     Plus,
     Search,
     Trash2,
@@ -64,6 +63,9 @@ const LitRow = ({
     const collections = useLiteratureStore((s) => s.collections)
     const moveToCollection = useLiteratureStore((s) => s.moveToCollection)
     const current = entry.collectionIds ?? []
+    // 移动菜单受控：打开期间强制按钮可见——按钮默认 hidden（hover 文献行才显示），
+    // 若菜单打开后按钮回到 hidden，floating-ui 拿不到 trigger 几何会把菜单定位到 (0,0)
+    const [moveOpen, setMoveOpen] = useState(false)
 
     return (
         <div
@@ -101,20 +103,26 @@ const LitRow = ({
             />
             <span className="min-w-0 flex-1 truncate">{entry.title || '未命名文献'}</span>
 
-            {/* hover 操作：移动到集合 */}
-            <DropdownMenu>
+            {/* hover 操作：移动到集合（受控 open，定位稳定） */}
+            <DropdownMenu open={moveOpen} onOpenChange={setMoveOpen}>
                 <DropdownMenuTrigger asChild>
                     <button
                         onClick={(e) => e.stopPropagation()}
                         title="移动到集合"
-                        className="hidden size-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-foreground group-hover/lit:grid"
+                        className={cn(
+                            'size-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-foreground',
+                            moveOpen ? 'grid' : 'hidden group-hover/lit:grid'
+                        )}
                     >
                         <FolderInput className="size-3.5" />
                     </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44 p-1">
                     <DropdownMenuItem
-                        onClick={() => void moveToCollection(entry.id, null)}
+                        onClick={() => {
+                            setMoveOpen(false)
+                            void moveToCollection(entry.id, null)
+                        }}
                         className={cn('cursor-pointer', current.length === 0 && 'bg-primary/10 text-primary')}
                     >
                         未分类
@@ -122,7 +130,10 @@ const LitRow = ({
                     {collections.map((c) => (
                         <DropdownMenuItem
                             key={c.id}
-                            onClick={() => void moveToCollection(entry.id, c.id)}
+                            onClick={() => {
+                                setMoveOpen(false)
+                                void moveToCollection(entry.id, c.id)
+                            }}
                             className={cn(
                                 'cursor-pointer',
                                 current.includes(c.id) && 'bg-primary/10 text-primary'
@@ -278,15 +289,15 @@ export const LiteratureList = () => {
                     </div>
                 ) : (
                     <>
-                        {/* 集合组标题 + 新建集合 */}
+                        {/* 集合组标题 + 新建集合（对齐笔记侧：纯 + 图标） */}
                         <div className="flex h-8 items-center justify-between px-2">
                             <span className="text-[11px] font-medium text-muted-foreground/70">集合</span>
                             <button
                                 onClick={() => setCreateOpen(true)}
                                 title="新建集合"
-                                className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                                className="grid size-5 place-items-center rounded text-muted-foreground transition-colors hover:text-primary"
                             >
-                                <FolderPlus className="size-3.5" />
+                                <Plus className="size-3.5" />
                             </button>
                         </div>
 
