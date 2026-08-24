@@ -27,15 +27,16 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const listConversations = async (): Promise<Conversation[]> => {
-    const data = await request<{ conversations: Conversation[] }>(
+    // 后端列表返回 {entries: [...]}，字段已 camelCase（createdAt/updatedAt/messageCount）
+    const data = await request<{ entries: Conversation[] }>(
         `${BASE_URL}/api/conversations`
     )
-    return data.conversations
+    return data.entries
 }
 
 export const createConversation = async (title?: string): Promise<Conversation> => {
-    // 兼容后端两种返回形态：裸对象 或 {conversation: ...}（联调对齐）
-    const data = await request<Conversation | { conversation: Conversation }>(
+    // 后端返回裸对象，但字段是 snake_case（created_at/updated_at）→ 归一化为前端形态
+    const data = await request<Conversation & { created_at?: string; updated_at?: string }>(
         `${BASE_URL}/api/conversations`,
         {
             method: 'POST',
@@ -43,10 +44,13 @@ export const createConversation = async (title?: string): Promise<Conversation> 
             body: JSON.stringify(title ? { title } : {}),
         }
     )
-    if (data && typeof data === 'object' && 'conversation' in data) {
-        return (data as { conversation: Conversation }).conversation
+    const now = new Date().toISOString()
+    return {
+        id: data.id,
+        title: data.title ?? '',
+        createdAt: data.createdAt ?? data.created_at ?? now,
+        updatedAt: data.updatedAt ?? data.updated_at ?? now,
     }
-    return data as Conversation
 }
 
 export const deleteConversation = async (id: string): Promise<void> => {
@@ -58,8 +62,14 @@ export const deleteConversation = async (id: string): Promise<void> => {
 export const getConversationMessages = async (
     id: string
 ): Promise<ConversationMessage[]> => {
-    const data = await request<{ messages: ConversationMessage[] }>(
-        `${BASE_URL}/api/conversations/${id}/messages`
-    )
-    return data.messages
+    // 后端消息字段是 snake_case（created_at）→ 归一化
+    const data = await request<{
+        messages: (ConversationMessage & { created_at?: string })[]
+    }>(`${BASE_URL}/api/conversations/${id}/messages`)
+    return data.messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt ?? m.created_at ?? '',
+    }))
 }

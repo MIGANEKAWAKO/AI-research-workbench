@@ -21,7 +21,8 @@ export const fetchAiResponse = async (
     body.text = text
   }
   if (docId) body.docId = docId
-  if (conversationId) body.conversation_id = conversationId
+  // M2 C2 联调对齐：后端解析 camelCase conversationId
+  if (conversationId) body.conversationId = conversationId
 
   const response = await fetch('http://localhost:3001/api/chat', {
     method: 'POST',

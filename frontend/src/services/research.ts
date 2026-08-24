@@ -20,7 +20,8 @@ export const fetchResearchTask = async (
     enableWeb: body.enableWeb,
   }
   if (body.scope) payload.scope = body.scope
-  if (body.conversationId) payload.conversation_id = body.conversationId
+  // M2 C2 联调对齐：后端解析 camelCase conversationId
+  if (body.conversationId) payload.conversationId = body.conversationId
 
   const response = await fetch('http://localhost:3001/api/research/tasks', {
     method: 'POST',
