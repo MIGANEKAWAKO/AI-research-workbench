@@ -15,9 +15,11 @@ import { LiteratureDetail } from "@/components/Literature/literature-detail";
 import { PdfReader } from "@/components/Reader/pdf-reader";
 import { UploadView } from "@/components/Literature/upload-view";
 import { useEffect, useRef } from 'react';
+import { Bot } from 'lucide-react';
 
 const Home = () => {
     const isAiPanelOpen = useNoteStore((state) => state.isAiPanelOpen);
+    const toggleAiPanel = useNoteStore((state) => state.toggleAiPanel);
     const activeNoteId = useNoteStore((state) => state.activeNoteId);
     const view = useNoteStore((state) => state.view);
     const readerId = useLiteratureStore((state) => state.readerId);
@@ -130,12 +132,14 @@ const Home = () => {
                                 </main>
                             </ResizablePanel>
 
+                            {/* AI 面板：size 参数均为百分比（相对面板组总宽），
+                                修复原 defaultSize=240/minSize=120 非法值导致的挤压 */}
                             {isAiPanelOpen && (
                                 <>
                                     <ResizableHandle withHandle /> {/* 拖拽柄 */}
                                     <ResizablePanel
-                                        defaultSize={240}
-                                        minSize={120}
+                                        defaultSize={30}
+                                        minSize={15}
                                         maxSize={50}
                                         className="transition-all duration-300 ease-in-out"
                                     >
@@ -147,6 +151,17 @@ const Home = () => {
                     </div>
                 </div>
             </SidebarProvider>
+
+            {/* AI 唤醒按钮（全局，笔记/文献模式均显示；面板折叠时右下角悬浮） */}
+            {!isAiPanelOpen && (
+                <button
+                    onClick={toggleAiPanel}
+                    title="打开 AI 助手"
+                    className="fixed right-[18px] bottom-[18px] z-[900] grid size-12 place-items-center rounded-full border border-border bg-card text-primary shadow-lg transition-colors hover:border-primary hover:bg-primary hover:text-white"
+                >
+                    <Bot className="size-5" />
+                </button>
+            )}
         </>
     )
 }

@@ -5,7 +5,7 @@ import { EditorContent, EditorContext, useEditor } from '@tiptap/react'
 import MainToolbarContent from './MainToolbarContent'
 import MobileToolbarContent from './MobileToolbarContent'
 import EditorHeader from '@/components/EditorHeader'
-import { Bot, BookOpen } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
 // extensions
 import { StarterKit } from '@tiptap/starter-kit'
@@ -54,8 +54,6 @@ import '@/components/tiptap-templates/simple/simple-editor.scss'
 const Editor = () => {
     const { saveNote, getNote } = useNotes()
     const activeNoteId = useNoteStore((state) => state.activeNoteId)
-    const toggleAi = useNoteStore((state) => state.toggleAiPanel)
-    const isOpen = useNoteStore((state) => state.isAiPanelOpen)
 
     const isMobile = useIsBreakpoint()
     const [mobileView, setMobileView] = useState<'main' | 'highlighter' | 'link'>('main')
@@ -285,17 +283,6 @@ const Editor = () => {
                         <CitationList editor={editor} />
                     </div>
                 </div>
-
-                {/* AI 唤醒按钮（设计稿 ai-reopen：面板折叠时显示，48px 圆形悬浮） */}
-                {!isOpen && (
-                    <button
-                        onClick={toggleAi}
-                        title="打开 AI 助手"
-                        className="fixed right-[18px] bottom-[18px] z-[900] grid size-12 place-items-center rounded-full border border-border bg-card text-primary shadow-lg transition-colors hover:border-primary hover:bg-primary hover:text-white"
-                    >
-                        <Bot className="size-5" />
-                    </button>
-                )}
                 </EditorContext.Provider>
             )}
         </div>
