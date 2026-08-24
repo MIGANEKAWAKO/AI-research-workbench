@@ -12,6 +12,7 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from openai import AsyncOpenAI
 
 from .config import settings
+from .conversations import append_message, build_history_messages, get_conversation
 from .indexer import scan_and_index
 from .prompts import (
     AI_ERROR_MESSAGE,
@@ -21,7 +22,7 @@ from .prompts import (
     SYSTEM_PROMPT_TEMPLATE,
     TASK_PROMPTS,
 )
-from .routers import documents, events, export_api, fs, kb_api, research
+from .routers import conversations, documents, events, export_api, fs, kb_api, research
 from .watcher import VaultWatcher
 
 from .rag import build_rag_context
@@ -56,6 +57,7 @@ app.include_router(documents.router, prefix="/api/documents")
 app.include_router(kb_api.router, prefix="/api/kb")
 app.include_router(export_api.router, prefix="/api/export")
 app.include_router(research.router, prefix="/api/research")
+app.include_router(conversations.router, prefix="/api/conversations")
 app.include_router(events.router, prefix="/api")
 
 app.add_middleware(
@@ -75,11 +77,41 @@ def _sse_data(payload: Dict[str, Any]) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+def _resolve_conversation_id(payload: Dict[str, Any]) -> str | None:
+    """校验 conversationId：非空字符串才有效（兼容前端不发该字段的旧请求）。"""
+    conv_id = payload.get("conversationId")
+    if isinstance(conv_id, str) and conv_id.strip():
+        return conv_id.strip()
+    return None
+
+
+def _build_history(conversation_id: str | None) -> list[dict[str, str]]:
+    """会话历史滑动窗口（C2）：会话不存在时静默返回 []（与无历史等价）。"""
+    if not conversation_id:
+        return []
+    return build_history_messages(get_conversation(conversation_id))
+
+
+def _persist_chat(conversation_id: str | None, user_text: str, assistant_text: str) -> None:
+    """chat 流结束写回会话（C2）：user 总写、assistant 有内容才写；失败仅告警。"""
+    if not conversation_id or not user_text:
+        return
+    try:
+        append_message(conversation_id, "user", user_text)
+        if assistant_text:
+            append_message(conversation_id, "assistant", assistant_text)
+    except Exception as exc:
+        print("会话写回失败（不影响响应）:", repr(exc))
+
+
 async def _build_messages(payload: Dict[str, Any]) -> Dict[str, Any]:
     task_type = payload.get("taskType")
     text = payload.get("text")
     messages = payload.get("messages")
     note_context = payload.get("noteContext")
+
+    conversation_id = _resolve_conversation_id(payload)
+    history = _build_history(conversation_id)
 
     if task_type or text:
         prompt = TASK_PROMPTS.get(task_type)
@@ -93,8 +125,11 @@ async def _build_messages(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "messages": [
                 {"role": "system", "content": prompt},
+                *history,
                 {"role": "user", "content": text.strip()},
-            ]
+            ],
+            "conversation_id": conversation_id,
+            "user_text": text.strip(),
         }
 
     if not isinstance(messages, list):
@@ -123,7 +158,7 @@ async def _build_messages(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     doc_id = payload.get("docId")
     rag_text = await anyio.to_thread.run_sync(build_rag_context, query, doc_id)
-    
+
     system_content = SYSTEM_PROMPT_TEMPLATE.format(note_context=note_context_text) + rag_text
 
     return {
@@ -132,15 +167,23 @@ async def _build_messages(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "role": "system",
                 "content": system_content,
             },
+            *history,
             *formatted_messages,
-        ]
+        ],
+        "conversation_id": conversation_id,
+        "user_text": query,
     }
 
 
-async def _stream_chat_completion(messages: List[Dict[str, Any]]) -> AsyncGenerator[str, None]:
+async def _stream_chat_completion(
+    messages: List[Dict[str, Any]],
+    conversation_id: str | None = None,
+    user_text: str = "",
+) -> AsyncGenerator[str, None]:
     yield ": \n\n"
 
     client = None
+    accumulated: List[str] = []
     try:
         client = AsyncOpenAI(
             api_key=settings.deepseek_api_key,
@@ -159,6 +202,7 @@ async def _stream_chat_completion(messages: List[Dict[str, Any]]) -> AsyncGenera
                 content = getattr(delta, "content", None)
 
             if content:
+                accumulated.append(content)
                 yield _sse_data({"content": content})
     except Exception as exc:  # pragma: no cover - runtime integration path
         print("DeepSeek API Error:", repr(exc))
@@ -169,6 +213,7 @@ async def _stream_chat_completion(messages: List[Dict[str, Any]]) -> AsyncGenera
                 await client.close()
         except Exception:
             pass
+        _persist_chat(conversation_id, user_text, "".join(accumulated))
 
 
 async def _stream_error(error_message: str) -> AsyncGenerator[str, None]:
@@ -201,7 +246,11 @@ async def chat(request: Request):
         )
 
     return StreamingResponse(
-        _stream_chat_completion(completion_messages["messages"]),
+        _stream_chat_completion(
+            completion_messages["messages"],
+            conversation_id=completion_messages.get("conversation_id"),
+            user_text=completion_messages.get("user_text", ""),
+        ),
         media_type="text/event-stream",
         headers=headers,
         status_code=200,

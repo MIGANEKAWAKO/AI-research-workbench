@@ -138,13 +138,20 @@ class ResearchOrchestrator:
         self.max_tool_calls = max_tool_calls
 
     async def run(
-        self, task: ResearchTask, emit: Callable[[dict[str, Any]], None] | None = None
+        self,
+        task: ResearchTask,
+        emit: Callable[[dict[str, Any]], None] | None = None,
+        history: list[dict[str, str]] | None = None,
     ) -> ResearchTask:
-        """执行完整任务循环；emit 接收平铺 SSE 事件 dict（A5 路由转 SSE 帧，测试传收集器）。"""
+        """执行完整任务循环；emit 接收平铺 SSE 事件 dict（A5 路由转 SSE 帧，测试传收集器）。
+
+        history（C2）：会话历史滑动窗口，注入 PLANNING 与 EXECUTING 的 messages，
+        让模型在规划与工具循环时感知前文；None/空列表 = 无历史（向后兼容）。
+        """
         emit = emit or (lambda _: None)
         emit(make_event("task.created", task_id=task.task_id, status=task.status.value))
         try:
-            await self._run_impl(task, emit)
+            await self._run_impl(task, emit, history)
         except Exception as exc:
             task.status = TaskStatus.FAILED
             task.error = repr(exc)
@@ -152,12 +159,14 @@ class ResearchOrchestrator:
         emit(make_event("task.completed", task_id=task.task_id))
         return task
 
-    async def _run_impl(self, task: ResearchTask, emit) -> None:
+    async def _run_impl(self, task: ResearchTask, emit, history: list[dict[str, str]] | None = None) -> None:
+        history = history or []
         # ---- PLANNING：模型输出步骤 JSON，解析失败退化为单步 ----
         task.transition(TaskStatus.PLANNING)
         plan_reply = await self.llm.complete(
             messages=[
                 {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
+                *history,
                 {"role": "user", "content": task.question},
             ]
         )
@@ -179,6 +188,7 @@ class ResearchOrchestrator:
         system_content = _scope_aware_prompt(task)
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_content},
+            *history,
             {"role": "user", "content": task.question},
         ]
         tools = self.registry.to_openai_tools()
