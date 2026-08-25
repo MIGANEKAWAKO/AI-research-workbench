@@ -35,11 +35,21 @@ class ConfigUpdate(BaseModel):
     vaultPath: str | None = None
     deepseekApiKey: str | None = None
     siliconflowApiKey: str | None = None
+    # P1 补充：模型服务请求地址（默认值已在 settings，用户可自定义/未来切换服务商）
+    deepseekBaseUrl: str | None = None
+    siliconflowBaseUrl: str | None = None
 
 
 class ConfigTestRequest(BaseModel):
+    """连通性测试：可携带"待保存的 key/baseUrl"（向导表单未保存时测试表单值），
+    未携带则用已保存的 settings。"""
+
     deepseek: bool = True
     siliconflow: bool = True
+    deepseekApiKey: str | None = None
+    siliconflowApiKey: str | None = None
+    deepseekBaseUrl: str | None = None
+    siliconflowBaseUrl: str | None = None
 
 
 @router.get("")
@@ -76,6 +86,16 @@ def update_config(req: ConfigUpdate, request: Request):
         settings.update(siliconflow_api_key=key)
         write_env("SILICONFLOW_API_KEY", key)
 
+    if req.deepseekBaseUrl is not None and req.deepseekBaseUrl.strip():
+        url = req.deepseekBaseUrl.strip()
+        settings.update(deepseek_base_url=url)
+        write_env("DEEPSEEK_BASE_URL", url)
+
+    if req.siliconflowBaseUrl is not None and req.siliconflowBaseUrl.strip():
+        url = req.siliconflowBaseUrl.strip()
+        settings.update(siliconflow_base_url=url)
+        write_env("SILICONFLOW_BASE_URL", url)
+
     # vault 路径变化 → 重启 watcher（监听新目录；开发期手动重启后端同样有效）
     if vault_changed:
         watcher = getattr(request.app.state, "watcher", None)
@@ -91,19 +111,22 @@ def update_config(req: ConfigUpdate, request: Request):
 
 @router.post("/test")
 def test_connections(req: ConfigTestRequest):
-    """连通性测试：DeepSeek chat ping / SiliconFlow embedding ping（仅测已配置项）。"""
+    """连通性测试：DeepSeek chat ping / SiliconFlow embedding ping。
+
+    优先使用请求携带的"待保存"key/baseUrl（向导表单未保存时测试表单值），
+    未携带则用已保存的 settings；两者都无 → 未配置（ok=null）。
+    """
 
     result: dict = {}
 
-    if req.deepseek and settings.deepseek_api_key:
+    deepseek_key = (req.deepseekApiKey or "").strip() or settings.deepseek_api_key
+    deepseek_url = (req.deepseekBaseUrl or "").strip() or settings.deepseek_base_url
+
+    if req.deepseek and deepseek_key:
         try:
             from openai import OpenAI
 
-            client = OpenAI(
-                base_url=settings.deepseek_base_url,
-                api_key=settings.deepseek_api_key,
-                timeout=15,
-            )
+            client = OpenAI(base_url=deepseek_url, api_key=deepseek_key, timeout=15)
             client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[{"role": "user", "content": "ping"}],
@@ -115,15 +138,14 @@ def test_connections(req: ConfigTestRequest):
     else:
         result["deepseek"] = {"ok": None, "error": "未配置"}
 
-    if req.siliconflow and settings.siliconflow_api_key:
+    siliconflow_key = (req.siliconflowApiKey or "").strip() or settings.siliconflow_api_key
+    siliconflow_url = (req.siliconflowBaseUrl or "").strip() or settings.siliconflow_base_url
+
+    if req.siliconflow and siliconflow_key:
         try:
             from openai import OpenAI
 
-            client = OpenAI(
-                base_url=settings.siliconflow_base_url,
-                api_key=settings.siliconflow_api_key,
-                timeout=15,
-            )
+            client = OpenAI(base_url=siliconflow_url, api_key=siliconflow_key, timeout=15)
             client.embeddings.create(model=settings.embedding_model, input="ping")
             result["siliconflow"] = {"ok": True}
         except Exception as exc:
