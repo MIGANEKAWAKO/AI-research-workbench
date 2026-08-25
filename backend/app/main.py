@@ -28,7 +28,7 @@ from .prompts import (
     SYSTEM_PROMPT_TEMPLATE,
     TASK_PROMPTS,
 )
-from .routers import conversations, documents, events, export_api, fs, kb_api, research
+from .routers import config_api, conversations, documents, events, export_api, fs, kb_api, research
 from .watcher import VaultWatcher
 
 from .rag import build_rag_context
@@ -53,6 +53,8 @@ async def lifespan(app: FastAPI):
             watcher.start(asyncio.get_running_loop())
         except Exception as exc:
             logger.warning("watchdog 启动失败（降级为前端轮询）: %r", exc)
+    # P1：挂到 app.state，配置 API 在 vault 路径变化时重启 watcher（监听新目录）
+    app.state.watcher = watcher
     yield
     if watcher is not None:
         watcher.stop()
@@ -67,6 +69,7 @@ app.include_router(kb_api.router, prefix="/api/kb")
 app.include_router(export_api.router, prefix="/api/export")
 app.include_router(research.router, prefix="/api/research")
 app.include_router(conversations.router, prefix="/api/conversations")
+app.include_router(config_api.router, prefix="/api/config")
 app.include_router(events.router, prefix="/api")
 
 app.add_middleware(
