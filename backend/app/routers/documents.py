@@ -45,13 +45,32 @@ class ProgressUpdate(BaseModel):
     lastPage: int | None = None
 
 
-class DocumentUpdate(BaseModel):
-    """文献更新（M2 文献集合归属，P2 元数据编辑的先行子集）。
+class AuthorName(BaseModel):
+    """作者姓名（对齐前端 [{given, family}] 结构）。"""
 
-    当前仅支持 collectionIds（文献归入哪些集合）；集合定义由前端管理
-    （.kb/literature-collections.json），后端只持久化归属、不校验集合存在性。
+    given: str = ""
+    family: str = ""
+
+
+class DocumentUpdate(BaseModel):
+    """文献元数据编辑（P2）：全部字段可选，None/缺失 = 不修改。
+
+    可编辑字段：title/authors/year/venue/volume/issue/pages/doi/arxivId/tags/collectionIds。
+    内部字段（id/pdfPath/status/lastPage/progressAt/importedAt）不可编辑。
+    注意 year 本身可为 null（年份未知）——"清空年份"用显式 null，
+    通过 model_fields_set 区分"未提供"与"显式 null"。
     """
 
+    title: str | None = None
+    authors: list[AuthorName] | None = None
+    year: int | None = None
+    venue: str | None = None
+    volume: str | None = None
+    issue: str | None = None
+    pages: str | None = None
+    doi: str | None = None
+    arxivId: str | None = None
+    tags: list[str] | None = None
     collectionIds: list[str] | None = None
 
 
@@ -249,18 +268,67 @@ def delete_document(lit_id: str):
 
 @router.put("/{lit_id}")
 def update_document(lit_id: str, req: DocumentUpdate):
-    """更新文献字段（文献集合归属）：collectionIds 白名单更新 → literature.json 原子写。
+    """更新文献元数据（P2 编辑 + 集合归属）→ literature.json 原子写。
 
-    集合定义由前端管理（.kb/literature-collections.json），后端只持久化归属、
-    不校验集合存在性（前端自由创建/删除集合）；未变时幂等不写盘。
+    全部字段可选：model_fields_set 区分"未提供"与"显式 null"（year 显式 null = 清空）。
+    校验：title/venue/volume/issue/pages/doi/arxivId strip + 限长；year 合理区间；
+    tags 去空去重；collectionIds 过滤非字符串。未变时幂等不写盘。
     """
     entry = get_entry(lit_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="文献不存在")
 
+    fields = req.model_fields_set
     changed = False
-    if req.collectionIds is not None:
-        cleaned = [c for c in req.collectionIds if isinstance(c, str)]
+
+    def set_str(field: str, value: str | None, max_len: int = 500) -> None:
+        nonlocal changed
+        cleaned = (value or "").strip()
+        if len(cleaned) > max_len:
+            raise HTTPException(status_code=400, detail=f"{field} 过长（最多 {max_len} 字）")
+        if getattr(entry, field) != cleaned:
+            setattr(entry, field, cleaned)
+            changed = True
+
+    if "title" in fields:
+        set_str("title", req.title, max_len=300)
+    if "venue" in fields:
+        set_str("venue", req.venue)
+    if "volume" in fields:
+        set_str("volume", req.volume, max_len=50)
+    if "issue" in fields:
+        set_str("issue", req.issue, max_len=50)
+    if "pages" in fields:
+        set_str("pages", req.pages, max_len=100)
+    if "doi" in fields:
+        set_str("doi", req.doi, max_len=200)
+    if "arxivId" in fields:
+        set_str("arxivId", req.arxivId, max_len=100)
+
+    if "year" in fields:
+        if req.year is not None and not (1000 <= req.year <= 2100):
+            raise HTTPException(status_code=400, detail="年份无效（1000-2100）")
+        if entry.year != req.year:
+            entry.year = req.year
+            changed = True
+
+    if "authors" in fields:
+        cleaned_authors = [{"given": a.given.strip(), "family": a.family.strip()} for a in (req.authors or [])]
+        if entry.authors != cleaned_authors:
+            entry.authors = cleaned_authors
+            changed = True
+
+    if "tags" in fields:
+        cleaned_tags = [t.strip() for t in (req.tags or []) if t.strip()]
+        # 去重保序
+        seen: set[str] = set()
+        unique_tags = [t for t in cleaned_tags if not (t in seen or seen.add(t))]
+        if entry.tags != unique_tags:
+            entry.tags = unique_tags
+            changed = True
+
+    if "collectionIds" in fields:
+        cleaned = [c for c in (req.collectionIds or []) if isinstance(c, str)]
         if entry.collectionIds != cleaned:
             entry.collectionIds = cleaned
             changed = True
