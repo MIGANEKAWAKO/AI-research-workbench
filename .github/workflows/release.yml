@@ -1,0 +1,36 @@
+name: Release
+
+# 发布模板：打 v* 标签时生成 Release 草稿（P6 Tauri 打包完成后在此附加
+# Windows 安装包产物，见 https://tauri.app/distribute/）。先建立发布流程，
+# 保证"打 tag → 出草稿 → 填发布说明"的路径可复用。
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  draft-release:
+    name: Draft GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          # 生成简化发布说明：最近 30 条提交的标题
+          git log -30 --pretty=format:'- %s' --no-merges > release-notes.txt
+          echo "notes-file=release-notes.txt" >> "$GITHUB_OUTPUT"
+
+      - name: Draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: false
+          body_path: ${{ steps.notes.outputs.notes-file }}
+          # P6 后在此挂安装包：files: |
+          #   backend/target/release/bundle/nsis/*.exe
