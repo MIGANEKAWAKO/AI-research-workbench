@@ -2,14 +2,40 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 
 load_dotenv()
 
+# .env 文件路径（backend/.env；P1 向导写入配置用）
+ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 
-@dataclass(frozen=True)
+
+def write_env(key: str, value: str) -> None:
+    """更新 .env 中的单个键值（不存在则追加）；原子写（tmp + os.replace）。
+
+    值原样写入（不包引号）：Windows 路径含空格时 dotenv 按行尾解析保留空格；
+    反斜杠不做转义处理（load_dotenv 对无引号值原样读取）。
+    """
+    lines: list[str] = []
+    if ENV_PATH.exists():
+        lines = ENV_PATH.read_text(encoding="utf-8").splitlines()
+    found = False
+    for i, line in enumerate(lines):
+        if line.strip().startswith(f"{key}="):
+            lines[i] = f"{key}={value}"
+            found = True
+            break
+    if not found:
+        lines.append(f"{key}={value}")
+    tmp = ENV_PATH.with_name(ENV_PATH.name + ".tmp")
+    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.replace(tmp, ENV_PATH)
+
+
+@dataclass
 class Settings:
     # LLM（DeepSeek，openai SDK 直连，不进 LangChain）
     deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY", "")
@@ -35,6 +61,14 @@ class Settings:
     # X1 本地缓存：redis_url 留配置位（未来多进程部署可选启用；第一版内存/磁盘缓存已够，不使用）
     redis_url: str = os.getenv("REDIS_URL", "")
 
+    def update(self, **kwargs: object) -> None:
+        """运行时更新配置字段（P1 向导使用）；None 值跳过（不修改）。
+
+        调用方负责同步写 .env 持久化（write_env）；仅改内存则重启后丢失。
+        """
+        for key, value in kwargs.items():
+            if value is not None and hasattr(self, key):
+                setattr(self, key, value)
+
 
 settings = Settings()
-
