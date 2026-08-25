@@ -41,11 +41,13 @@ export const getConfigStatus = async (): Promise<ConfigStatus> => {
     return request<ConfigStatus>(`${BASE_URL}/api/config`)
 }
 
-/** 写入配置（vault 路径 / API key；空字符串不写入） */
+/** 写入配置（vault 路径 / API key / 请求地址；空字符串不写入） */
 export const saveConfig = async (patch: {
     vaultPath?: string
     deepseekApiKey?: string
     siliconflowApiKey?: string
+    deepseekBaseUrl?: string
+    siliconflowBaseUrl?: string
 }): Promise<ConfigStatus> => {
     return request<ConfigStatus>(`${BASE_URL}/api/config`, {
         method: 'POST',
@@ -54,11 +56,19 @@ export const saveConfig = async (patch: {
     })
 }
 
-/** 连通性测试（仅测已配置项；未配置返回 ok=null） */
-export const testConnections = async (): Promise<TestResults> => {
+/**
+ * 连通性测试：携带"待保存"的 key/baseUrl（向导表单未保存时测表单值），
+ * 未携带则后端用已保存的配置；未配置返回 ok=null。
+ */
+export const testConnections = async (options?: {
+    deepseekApiKey?: string
+    siliconflowApiKey?: string
+    deepseekBaseUrl?: string
+    siliconflowBaseUrl?: string
+}): Promise<TestResults> => {
     return request<TestResults>(`${BASE_URL}/api/config/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify(options ?? {}),
     })
 }

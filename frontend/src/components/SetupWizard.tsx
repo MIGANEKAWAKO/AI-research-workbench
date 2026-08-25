@@ -30,6 +30,9 @@ export const SetupWizard = ({ onDone }: { onDone: () => void }) => {
     const [vaultPath, setVaultPath] = useState('')
     const [deepseekKey, setDeepseekKey] = useState('')
     const [siliconflowKey, setSiliconflowKey] = useState('')
+    // P1 补充：模型服务请求地址（预填默认值，可自定义——未来切换服务商）
+    const [deepseekBaseUrl, setDeepseekBaseUrl] = useState('https://api.deepseek.com')
+    const [siliconflowBaseUrl, setSiliconflowBaseUrl] = useState('https://api.siliconflow.cn/v1')
     const [testing, setTesting] = useState(false)
     const [testResults, setTestResults] = useState<TestResults | null>(null)
     const [saving, setSaving] = useState(false)
@@ -40,7 +43,13 @@ export const SetupWizard = ({ onDone }: { onDone: () => void }) => {
         setTesting(true)
         setTestResults(null)
         try {
-            const results = await testConnections()
+            // 携带表单中的 key/baseUrl：未保存也能测通（后端优先用传入值）
+            const results = await testConnections({
+                ...(deepseekKey.trim() ? { deepseekApiKey: deepseekKey.trim() } : {}),
+                ...(siliconflowKey.trim() ? { siliconflowApiKey: siliconflowKey.trim() } : {}),
+                ...(deepseekBaseUrl.trim() ? { deepseekBaseUrl: deepseekBaseUrl.trim() } : {}),
+                ...(siliconflowBaseUrl.trim() ? { siliconflowBaseUrl: siliconflowBaseUrl.trim() } : {}),
+            })
             setTestResults(results)
         } catch (e) {
             toast.error(e instanceof Error ? e.message : '测试请求失败')
@@ -58,6 +67,8 @@ export const SetupWizard = ({ onDone }: { onDone: () => void }) => {
                 vaultPath,
                 ...(deepseekKey.trim() ? { deepseekApiKey: deepseekKey.trim() } : {}),
                 ...(siliconflowKey.trim() ? { siliconflowApiKey: siliconflowKey.trim() } : {}),
+                deepseekBaseUrl: deepseekBaseUrl.trim(),
+                siliconflowBaseUrl: siliconflowBaseUrl.trim(),
             })
             toast.success('配置已保存')
             onDone()
@@ -164,6 +175,7 @@ export const SetupWizard = ({ onDone }: { onDone: () => void }) => {
                         </div>
                         <p className="text-xs leading-relaxed text-muted-foreground">
                             未配置也可正常管理文献与笔记；配置后启用 AI 问答、划词翻译与研究任务。
+                            请求地址已预填默认值，可改为其他兼容服务（未来将支持服务商选择）。
                         </p>
                         <div>
                             <label className="mb-1 block text-[11px] font-medium text-muted-foreground/70">
@@ -176,6 +188,15 @@ export const SetupWizard = ({ onDone }: { onDone: () => void }) => {
                                 placeholder="sk-…"
                                 className="font-mono text-xs"
                             />
+                            <label className="mt-1.5 mb-1 block text-[11px] font-medium text-muted-foreground/70">
+                                DeepSeek 请求地址
+                            </label>
+                            <Input
+                                value={deepseekBaseUrl}
+                                onChange={(e) => setDeepseekBaseUrl(e.target.value)}
+                                placeholder="https://api.deepseek.com"
+                                className="font-mono text-xs"
+                            />
                         </div>
                         <div>
                             <label className="mb-1 block text-[11px] font-medium text-muted-foreground/70">
@@ -186,6 +207,15 @@ export const SetupWizard = ({ onDone }: { onDone: () => void }) => {
                                 value={siliconflowKey}
                                 onChange={(e) => setSiliconflowKey(e.target.value)}
                                 placeholder="sk-…（可稍后在 .env 中补充）"
+                                className="font-mono text-xs"
+                            />
+                            <label className="mt-1.5 mb-1 block text-[11px] font-medium text-muted-foreground/70">
+                                SiliconFlow 请求地址
+                            </label>
+                            <Input
+                                value={siliconflowBaseUrl}
+                                onChange={(e) => setSiliconflowBaseUrl(e.target.value)}
+                                placeholder="https://api.siliconflow.cn/v1"
                                 className="font-mono text-xs"
                             />
                         </div>
