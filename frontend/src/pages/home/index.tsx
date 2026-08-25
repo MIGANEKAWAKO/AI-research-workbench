@@ -14,8 +14,10 @@ import { useLiteratureStore } from "@/store/useLiteratureStore";
 import { LiteratureDetail } from "@/components/Literature/literature-detail";
 import { PdfReader } from "@/components/Reader/pdf-reader";
 import { UploadView } from "@/components/Literature/upload-view";
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Bot } from 'lucide-react';
+import { SetupWizard } from '@/components/SetupWizard';
+import { getConfigStatus } from '@/services/config';
 
 const Home = () => {
     const isAiPanelOpen = useNoteStore((state) => state.isAiPanelOpen);
@@ -26,13 +28,32 @@ const Home = () => {
     const entries = useLiteratureStore((state) => state.entries);
     const uploadOpen = useLiteratureStore((state) => state.uploadOpen);
 
+    // M2 P1：首次启动向导——配置完成前不显示主界面
+    const [checkingConfig, setCheckingConfig] = useState(true)
+    const [setupDone, setSetupDone] = useState(true)
+
     // 文献模式中间面板：上传页（打开中 或 列表为空）→ 阅读器 → 详情/空态
     const showUpload = uploadOpen || entries.length === 0;
 
+    useEffect(() => {
+        void (async () => {
+            try {
+                const status = await getConfigStatus()
+                setSetupDone(status.configured)
+            } catch {
+                // 后端不可用：不阻塞进入（主界面已有离线降级提示）
+                setSetupDone(true)
+            } finally {
+                setCheckingConfig(false)
+            }
+        })()
+    }, [])
+
     // F1：应用启动时从 vault 加载笔记（扫描 vault/笔记/*.md）
+    // M2 P1：向导完成后重新加载（配置前 vault 是默认空目录）
     useEffect(() => {
         useDataStore.getState().loadAll()
-    }, [])
+    }, [setupDone])
 
     // F4：进入文献模式时加载文献列表 + 集合定义（后端 literature.json + 前端 .kb/literature-collections.json）
     useEffect(() => {
@@ -40,7 +61,7 @@ const Home = () => {
             useLiteratureStore.getState().load()
             void useLiteratureStore.getState().loadCollections()
         }
-    }, [view])
+    }, [view, setupDone])
 
     // F3 演进（M2 A5）：vault 变更感知——SSE 订阅为主（后端 watchdog 实时推送，
     // GET /api/events），EventSource 断线/不可用时降级 30s 轮询兜底；重连成功即停轮询。
@@ -96,6 +117,19 @@ const Home = () => {
             stopPoll()
         }
     }, [])
+
+    // M2 P1：向导期间不渲染主界面（hooks 已全部在条件 return 之前执行，顺序稳定）
+    if (checkingConfig) {
+        return (
+            <div className="flex h-screen w-full items-center justify-center bg-background text-sm text-muted-foreground">
+                正在启动…
+            </div>
+        )
+    }
+
+    if (!setupDone) {
+        return <SetupWizard onDone={() => setSetupDone(true)} />
+    }
 
     return (
         <>
