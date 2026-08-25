@@ -73,6 +73,35 @@ export const updateLiteratureProgress = async (
 }
 
 /**
+ * M2 P2：文献元数据编辑（通用 PUT，字段可选；后端 model_fields_set 区分
+ * "未提供"与"显式 null"——year 传 null = 清空年份；幂等——未变不写盘）。
+ */
+export interface LiteraturePatch {
+    title?: string
+    authors?: { given: string; family: string }[]
+    year?: number | null
+    venue?: string
+    volume?: string
+    issue?: string
+    pages?: string
+    doi?: string
+    arxivId?: string
+    tags?: string[]
+    collectionIds?: string[]
+}
+
+export const updateLiteratureMetadata = async (
+    id: string,
+    patch: LiteraturePatch
+): Promise<LiteratureEntry> => {
+    return request<LiteratureEntry>(`${BASE_URL}/api/documents/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+    })
+}
+
+/**
  * M2 文献集合归属：更新文献 collectionIds（集合定义由前端管理，
  * 后端只持久化归属、不校验集合存在性；幂等——未变不写盘）。
  */
@@ -80,9 +109,5 @@ export const updateLiteratureCollections = async (
     id: string,
     collectionIds: string[]
 ): Promise<LiteratureEntry> => {
-    return request<LiteratureEntry>(`${BASE_URL}/api/documents/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ collectionIds }),
-    })
+    return updateLiteratureMetadata(id, { collectionIds })
 }

@@ -6,6 +6,8 @@ import {
     deleteLiterature,
     updateLiteratureProgress,
     updateLiteratureCollections,
+    updateLiteratureMetadata,
+    type LiteraturePatch,
 } from '@/services/literature'
 import { createStorageAdapter } from '@/services/storage'
 import { useAnnotationStore } from '@/store/useAnnotationStore'
@@ -63,6 +65,8 @@ interface LiteratureState {
     remove: (id: string) => Promise<void>
     /** M2 A3：更新阅读进度（状态/页码），成功后原地更新 entries（保持排序） */
     updateProgress: (id: string, patch: { status?: string; lastPage?: number }) => Promise<void>
+    /** M2 P2：更新文献元数据（编辑保存），成功后原地更新 entries */
+    updateMetadata: (id: string, patch: LiteraturePatch) => Promise<void>
     setActive: (id: string | null) => void
     openReader: (id: string) => void
     closeReader: () => void
@@ -201,6 +205,20 @@ export const useLiteratureStore = create<LiteratureState>((set, get) => ({
             }))
         } catch (e) {
             set({ error: e instanceof Error ? e.message : '更新进度失败' })
+        }
+    },
+
+    updateMetadata: async (id, patch) => {
+        set({ error: null })
+        try {
+            const updated = await updateLiteratureMetadata(id, patch)
+            // 原地更新（保持排序）；导出/引用/详情展示读取同一 entries，自动同步
+            set((state) => ({
+                entries: state.entries.map((e) => (e.id === id ? updated : e)),
+            }))
+        } catch (e) {
+            set({ error: e instanceof Error ? e.message : '保存失败' })
+            throw e
         }
     },
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BookOpen, ClipboardCopy, FileText, MoreHorizontal, Plus, Star, Trash2 } from 'lucide-react'
+import { BookOpen, ClipboardCopy, FileText, MoreHorizontal, Pencil, Plus, Star, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useLiteratureStore } from '@/store/useLiteratureStore'
 import { useDataStore } from '@/store/useDataStore'
+import { LiteratureEditDialog } from './literature-edit-dialog'
 import { formatReference } from '@/lib/citation'
 import { cn } from '@/lib/utils'
 
@@ -47,6 +48,8 @@ export const LiteratureDetail = () => {
     const notes = useDataStore((s) => s.notes)
 
     const [deleteOpen, setDeleteOpen] = useState(false)
+    // M2 P2：元数据编辑对话框
+    const [editOpen, setEditOpen] = useState(false)
 
     const entry = entries.find((e) => e.id === activeId) ?? null
 
@@ -221,7 +224,7 @@ export const LiteratureDetail = () => {
                     )}
                 </div>
 
-                {/* action-row（设计稿：阅读文献 primary + 复制引用 ghost） */}
+                {/* action-row（设计稿：阅读文献 primary + 复制引用 ghost + 编辑元数据） */}
                 <div className="flex gap-3">
                     <Button onClick={() => openReader(entry.id)}>
                         <BookOpen className="size-4" />
@@ -230,6 +233,11 @@ export const LiteratureDetail = () => {
                     <Button variant="outline" onClick={handleCopyCitation}>
                         <ClipboardCopy className="size-4" />
                         复制引用
+                    </Button>
+                    {/* M2 P2：编辑元数据（保存后导出/引用同步生效） */}
+                    <Button variant="outline" onClick={() => setEditOpen(true)}>
+                        <Pencil className="size-4" />
+                        编辑信息
                     </Button>
                 </div>
 
@@ -244,6 +252,9 @@ export const LiteratureDetail = () => {
                     </button>
                 </div>
             </div>
+
+            {/* M2 P2：编辑文献信息（保存后 entries 原地更新，详情/导出/引用同步） */}
+            <LiteratureEditDialog entry={entry} open={editOpen} onOpenChange={setEditOpen} />
 
             {/* 删除确认（AlertDialog，替换 confirm） */}
             <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
