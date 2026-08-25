@@ -130,3 +130,63 @@ def test_test_connections_calls_openai(monkeypatch, tmp_env):
     body = resp.json()
     assert body["deepseek"] == {"ok": False, "error": "401 invalid api key"}
     assert body["siliconflow"] == {"ok": True}
+
+
+def test_test_connections_uses_provided_key(monkeypatch, tmp_env):
+    """向导表单未保存时：测试应使用请求携带的 key（优先于 settings）。"""
+    cfg.settings.deepseek_api_key = ""  # 已保存为空
+    cfg.settings.siliconflow_api_key = ""
+
+    seen: dict = {}
+
+    class FakeChat:
+        def __init__(self):
+            self.completions = self
+
+        def create(self, **kwargs):
+            seen["deepseek"] = True
+            return {"choices": []}
+
+    class FakeEmbeddings:
+        def create(self, **kwargs):
+            seen["siliconflow"] = True
+            return {"data": []}
+
+    class FakeOpenAI:
+        def __init__(self, base_url=None, api_key=None, timeout=None):
+            seen.setdefault("keys", []).append((base_url, api_key))
+
+        @property
+        def chat(self):
+            return FakeChat()
+
+        @property
+        def embeddings(self):
+            return FakeEmbeddings()
+
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+    resp = client.post(
+        "/api/config/test",
+        json={
+            "deepseekApiKey": "sk-form",
+            "deepseekBaseUrl": "https://custom.deepseek.example",
+            "siliconflowApiKey": "sf-form",
+        },
+    )
+    body = resp.json()
+    assert body["deepseek"] == {"ok": True}
+    assert body["siliconflow"] == {"ok": True}
+    # 携带的 key/baseUrl 被用于客户端构造（未保存也测通）
+    assert ("https://custom.deepseek.example", "sk-form") in seen["keys"]
+
+
+def test_post_config_writes_base_urls(tmp_env):
+    resp = client.post(
+        "/api/config",
+        json={"deepseekBaseUrl": "https://custom.deepseek.example", "siliconflowBaseUrl": "https://custom.sf.example"},
+    )
+    assert resp.status_code == 200
+    env_text = (tmp_env / ".env").read_text(encoding="utf-8")
+    assert "DEEPSEEK_BASE_URL=https://custom.deepseek.example" in env_text
+    assert "SILICONFLOW_BASE_URL=https://custom.sf.example" in env_text
+    assert cfg.settings.deepseek_base_url == "https://custom.deepseek.example"
