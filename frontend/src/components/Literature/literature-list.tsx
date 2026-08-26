@@ -4,6 +4,7 @@ import {
     Folder,
     FolderInput,
     FolderOpen,
+    Pencil,
     Plus,
     Search,
     Trash2,
@@ -37,7 +38,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { useLiteratureStore } from '@/store/useLiteratureStore'
-import { ImportSheet } from './import-sheet'
 import type { LiteratureEntry } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -168,6 +168,7 @@ export const LiteratureList = () => {
     const remove = useLiteratureStore((s) => s.remove)
     const collections = useLiteratureStore((s) => s.collections)
     const addCollection = useLiteratureStore((s) => s.addCollection)
+    const renameCollection = useLiteratureStore((s) => s.renameCollection)
     const deleteCollection = useLiteratureStore((s) => s.deleteCollection)
     const { state: sidebarState } = useSidebar()
     const collapsed = sidebarState === 'collapsed'
@@ -175,7 +176,6 @@ export const LiteratureList = () => {
     const [keyword, setKeyword] = useState('')
     const [open, setOpen] = useState(true) // 未分类组折叠
     const [collapsedCols, setCollapsedCols] = useState<Set<string>>(new Set())
-    const [importOpen, setImportOpen] = useState(false)
     const [deleteTarget, setDeleteTarget] = useState<
         { type: 'literature' | 'collection'; id: string; label: string } | null
     >(null)
@@ -183,6 +183,28 @@ export const LiteratureList = () => {
     // 新建集合 Dialog
     const [createOpen, setCreateOpen] = useState(false)
     const [createValue, setCreateValue] = useState('')
+
+    // M2：重命名集合 Dialog（对齐笔记侧 hover 交互；名称去重由 store 处理）
+    const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null)
+    const [renameValue, setRenameValue] = useState('')
+
+    const handleRenameCollection = (e: React.MouseEvent, id: string, name: string) => {
+        e.stopPropagation()
+        setRenameValue(name)
+        setRenameTarget({ id, name })
+    }
+
+    const submitRename = () => {
+        if (!renameTarget) return
+        const newName = renameValue.trim()
+        if (!newName) {
+            toast.error('名称不能为空')
+            return
+        }
+        renameCollection(renameTarget.id, newName)
+        setRenameTarget(null)
+        toast.success('集合已重命名')
+    }
 
     // 搜索：标题 / 作者
     const filtered = useMemo(() => {
@@ -220,13 +242,9 @@ export const LiteratureList = () => {
         })
     }
 
-    // 新建文献：空列表 → 提示直接在上传页上传；非空 → 弹导入抽屉
+    // 新建文献：直接打开文献上传页（与空状态「导入文献」同一入口，原侧边抽屉弃用）
     const handleNewLiterature = () => {
-        if (entries.length === 0) {
-            toast.info('文献库为空，请直接在上传页上传')
-            return
-        }
-        setImportOpen(true)
+        useLiteratureStore.getState().openUpload()
     }
 
     const submitCreateCollection = () => {
@@ -253,7 +271,9 @@ export const LiteratureList = () => {
     }
 
     return (
-        <div className={cn('flex h-full flex-col gap-3 px-3', collapsed && 'hidden')}>
+        /* pt-1：对齐笔记侧「新建按钮到 Tab 的距离」（笔记=header gap-3 12px；
+           文献=header pb-2 8px + 此处 4px = 12px），保证两模式按钮垂直位置一致 */
+        <div className={cn('flex h-full flex-col gap-3 px-3 pt-1', collapsed && 'hidden')}>
             {/* 新建文献按钮（设计稿 new-btn） */}
             <button
                 onClick={handleNewLiterature}
@@ -322,20 +342,30 @@ export const LiteratureList = () => {
                                             <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
                                         )}
                                         <span className="truncate">{col.name}</span>
-                                        <span className="ml-auto text-[11px] text-muted-foreground/70">
+                                        {/* hover 时数量隐藏（对齐笔记侧交互） */}
+                                        <span className="ml-auto text-[11px] text-muted-foreground/70 group-hover/col:hidden">
                                             {items.length}
                                         </span>
-                                        {/* hover 删除集合 */}
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                setDeleteTarget({ type: 'collection', id: col.id, label: col.name })
-                                            }}
-                                            title="删除集合（文献移回未分类）"
-                                            className="hidden size-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-destructive group-hover/col:grid"
-                                        >
-                                            <Trash2 className="size-3.5" />
-                                        </button>
+                                        {/* hover 操作：重命名 + 删除集合 */}
+                                        <div className="ml-auto hidden items-center gap-0.5 group-hover/col:flex">
+                                            <button
+                                                onClick={(e) => handleRenameCollection(e, col.id, col.name)}
+                                                title="重命名集合"
+                                                className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                                            >
+                                                <Pencil className="size-3.5" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setDeleteTarget({ type: 'collection', id: col.id, label: col.name })
+                                                }}
+                                                title="删除集合（文献移回未分类）"
+                                                className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-destructive"
+                                            >
+                                                <Trash2 className="size-3.5" />
+                                            </button>
+                                        </div>
                                     </div>
 
                                     {/* 集合下文献（未折叠时） */}
@@ -424,9 +454,6 @@ export const LiteratureList = () => {
                 )}
             </div>
 
-            {/* 导入抽屉（非空列表时使用） */}
-            <ImportSheet open={importOpen} onOpenChange={setImportOpen} />
-
             {/* 新建集合 Dialog */}
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
                 <DialogContent className="w-[320px] max-w-full rounded-xl">
@@ -448,6 +475,30 @@ export const LiteratureList = () => {
                             取消
                         </Button>
                         <Button onClick={submitCreateCollection}>创建</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 重命名集合 Dialog（对齐笔记侧重命名交互） */}
+            <Dialog open={renameTarget !== null} onOpenChange={(o) => !o && setRenameTarget(null)}>
+                <DialogContent className="w-[320px] max-w-full rounded-xl">
+                    <DialogHeader>
+                        <DialogTitle>重命名集合</DialogTitle>
+                        <DialogDescription>修改「{renameTarget?.name}」的名称，文献归属保持不变。</DialogDescription>
+                    </DialogHeader>
+                    <Input
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') submitRename()
+                        }}
+                        autoFocus
+                    />
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRenameTarget(null)}>
+                            取消
+                        </Button>
+                        <Button onClick={submitRename}>保存</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

@@ -1,0 +1,385 @@
+/* ============================================================
+ * 工作台空状态（笔记 / 文献）——从静态设计稿 知微-科研工作台.html
+ * 的 <!-- HERO ILLUSTRATION --> 与
+ * <!-- HERO ILLUSTRATION (literature / research motif) --> 移植。
+ *
+ * 设计稿色板 → shadcn token 映射（作用域内变量，SVG 中的
+ * var(--blue) / var(--surface) 等原样可用）：
+ *   bg=background  surface=card  elevated=popover  border=border
+ *   text-1=foreground  text-2=muted-foreground  text-3=muted-foreground/72
+ *   blue=primary  green=success  amber=warning  red=destructive
+ *   purple=新增（深 #B89AFF / 浅 #7C4DFF，设计稿原值）
+ *
+ * 响应式：中间面板可拖拽调宽，用容器查询（container-type: inline-size）
+ * 替代设计稿的视口媒体查询，窄面板时同样收敛为 2 列。
+ * ============================================================ */
+.es-stage {
+    /* ---- 设计稿色板映射（作用域内，SVG 内联 var() 直接可用） ---- */
+    --bg: var(--background);
+    --surface: var(--card);
+    --elevated: var(--popover);
+    --border-soft: color-mix(in srgb, var(--border) 55%, transparent);
+    --text-1: var(--foreground);
+    --text-2: var(--muted-foreground);
+    --text-3: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
+    --blue: var(--primary);
+    --blue-2: color-mix(in srgb, var(--primary) 72%, white);
+    --blue-soft: color-mix(in srgb, var(--primary) 12%, transparent);
+    --blue-glow: color-mix(in srgb, var(--primary) 18%, transparent);
+    --green: var(--success);
+    --green-soft: color-mix(in srgb, var(--success) 12%, transparent);
+    --red: var(--destructive);
+    --amber: var(--warning);
+    --amber-soft: color-mix(in srgb, var(--warning) 12%, transparent);
+    --purple: #B89AFF;
+    --purple-soft: rgba(154, 108, 255, 0.14);
+
+    /* 中间面板可拖拽调宽 → 容器查询（对 .es-actions/.es-hero 等后代生效） */
+    container-type: inline-size;
+
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 56px 40px 64px;
+    position: relative;
+    background:
+        radial-gradient(ellipse 60% 40% at 50% 0%, var(--blue-glow), transparent 70%),
+        var(--bg);
+
+    /* 设计稿 empty-stage::before：非常淡的点阵网格 + 径向遮罩 */
+    &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+        background-size: 26px 26px;
+        opacity: 0.35;
+        pointer-events: none;
+        mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, #000 30%, transparent 80%);
+        -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, #000 30%, transparent 80%);
+    }
+}
+
+/* 浅色主题的紫色卡（设计稿 [data-theme="light"] 覆盖） */
+html:not(.dark) .es-stage {
+    --purple: #7C4DFF;
+    --purple-soft: rgba(124, 77, 255, 0.10);
+}
+
+.es-stage-inner {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 800px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* ---------- Hero illustration ---------- */
+.es-hero {
+    width: 320px;
+    height: 200px;
+    margin-bottom: 36px;
+    filter: drop-shadow(0 18px 40px var(--blue-glow));
+}
+.es-hero.float {
+    animation: es-floaty 6s ease-in-out infinite;
+}
+@keyframes es-floaty {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-6px); }
+}
+
+/* ---------- Headline ---------- */
+.es-headline {
+    text-align: center;
+    margin-bottom: 14px;
+    animation: es-fade-up 0.5s ease 0.05s backwards;
+}
+.es-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px 4px 8px;
+    border-radius: 99px;
+    background: var(--blue-soft);
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    margin-bottom: 16px;
+}
+.es-eyebrow .es-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 0 4px var(--blue-soft);
+}
+.es-title {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--text-1);
+    line-height: 1.25;
+}
+.es-title .accent {
+    background: linear-gradient(135deg, var(--blue), var(--blue-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+}
+.es-sub {
+    font-size: 14.5px;
+    color: var(--text-2);
+    max-width: 540px;
+    margin: 14px auto 0;
+    line-height: 1.7;
+}
+
+/* ---------- Quick actions ---------- */
+.es-actions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    width: 100%;
+    margin-top: 44px;
+    animation: es-fade-up 0.5s ease 0.12s backwards;
+}
+.es-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px 18px 18px;
+    border-radius: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    color: var(--text-1);
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.es-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--blue);
+    box-shadow: 0 10px 30px var(--blue-glow);
+}
+.es-card.primary {
+    background: linear-gradient(135deg, var(--blue-soft), transparent 65%);
+    border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+}
+.es-card.primary:hover {
+    border-color: var(--blue);
+}
+.es-card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+    display: grid;
+    place-items: center;
+    background: var(--blue-soft);
+    color: var(--blue);
+    transition: 0.18s;
+}
+.es-card.accent-green .es-card-icon {
+    background: var(--green-soft);
+    color: var(--green);
+}
+.es-card.accent-amber .es-card-icon {
+    background: var(--amber-soft);
+    color: var(--amber);
+}
+.es-card.accent-purple .es-card-icon {
+    background: var(--purple-soft);
+    color: var(--purple);
+}
+.es-card:hover .es-card-icon {
+    transform: scale(1.06);
+}
+.es-card-title {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--text-1);
+}
+.es-card-desc {
+    font-size: 12.5px;
+    color: var(--text-3);
+    line-height: 1.55;
+}
+.es-card-kbd {
+    position: absolute;
+    top: 18px;
+    right: 16px;
+    font-family: 'Geist Mono', ui-monospace, 'SFMono-Regular', monospace;
+    font-size: 10.5px;
+    color: var(--text-3);
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: var(--bg);
+    border: 1px solid var(--border-soft);
+}
+.es-card-arrow {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    color: var(--text-3);
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: 0.2s ease;
+}
+.es-card:hover .es-card-arrow {
+    opacity: 1;
+    transform: translateX(0);
+    color: var(--blue);
+}
+
+/* ---------- Recent activity ---------- */
+.es-recent {
+    width: 100%;
+    margin-top: 56px;
+    animation: es-fade-up 0.5s ease 0.2s backwards;
+}
+.es-recent-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+.es-recent-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.es-recent-title::before {
+    content: '';
+    width: 14px;
+    height: 1px;
+    background: var(--text-3);
+}
+.es-recent-link {
+    font-size: 12.5px;
+    color: var(--text-2);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: 0.12s;
+    background: none;
+    border: none;
+    font-family: inherit;
+}
+.es-recent-link:hover {
+    color: var(--blue);
+    background: var(--blue-soft);
+}
+.es-recent-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+.es-recent-item {
+    /* min-width: 0：grid item 默认 min-width:auto，长标题（nowrap）的 min-content
+       会把 1fr 列撑破导致列表项超出页面（文献长标题尤甚）；允许收缩后由
+       .es-recent-name/.es-recent-info 的 ellipsis 截断 */
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 11px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: 0.14s;
+    text-align: left;
+    font-family: inherit;
+    color: inherit;
+    width: 100%;
+}
+.es-recent-item:hover {
+    border-color: var(--text-3);
+    background: var(--elevated);
+    transform: translateX(2px);
+}
+.es-recent-ico {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    flex: 0 0 34px;
+    display: grid;
+    place-items: center;
+    background: var(--bg);
+    color: var(--text-2);
+    border: 1px solid var(--border-soft);
+}
+.es-recent-item.lit .es-recent-ico {
+    background: var(--blue-soft);
+    color: var(--blue);
+    border-color: transparent;
+}
+.es-recent-meta {
+    flex: 1;
+    min-width: 0;
+}
+.es-recent-name {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.es-recent-info {
+    font-size: 11.5px;
+    color: var(--text-3);
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+.es-recent-info .es-coll {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* info 文本（如「PDF · 2024」）同样截断，防止撑破列表项 */
+.es-recent-info > span:not(.dot) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.es-recent-info .dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--text-3);
+    flex: 0 0 3px;
+}
+
+@keyframes es-fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Responsive（窄面板，容器查询替代视口媒体查询） ---------- */
+@container (max-width: 900px) {
+    .es-actions { grid-template-columns: repeat(2, 1fr); }
+    .es-recent-grid { grid-template-columns: 1fr; }
+    .es-hero { width: 260px; height: 162px; }
+    .es-title { font-size: 26px; }
+}

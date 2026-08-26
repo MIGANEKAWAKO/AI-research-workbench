@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BookOpen, ClipboardCopy, FileText, MoreHorizontal, Pencil, Plus, Star, Trash2 } from 'lucide-react'
+import { BookOpen, ClipboardCopy, FileText, MoreHorizontal, Pencil, Star, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,6 +17,7 @@ import { useDataStore } from '@/store/useDataStore'
 import { LiteratureEditDialog } from './literature-edit-dialog'
 import { formatReference } from '@/lib/citation'
 import { cn } from '@/lib/utils'
+import { LiteratureEmptyState } from '@/components/WorkbenchEmpty'
 
 /** 设计稿 meta-cell：surface 底 + 边框的圆角信息格 */
 const MetaCell = ({ label, value }: { label: string; value: string }) => (
@@ -43,7 +44,6 @@ export const LiteratureDetail = () => {
     const activeId = useLiteratureStore((s) => s.activeId)
     const remove = useLiteratureStore((s) => s.remove)
     const openReader = useLiteratureStore((s) => s.openReader)
-    const openUpload = useLiteratureStore((s) => s.openUpload)
     const updateProgress = useLiteratureStore((s) => s.updateProgress)
     const notes = useDataStore((s) => s.notes)
 
@@ -53,22 +53,9 @@ export const LiteratureDetail = () => {
 
     const entry = entries.find((e) => e.id === activeId) ?? null
 
+    // 未选中文献 → 文献空状态页（设计稿 view-lit-empty：HERO 插画 + 快捷操作 + 最近导入）
     if (!entry) {
-        return (
-            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-                <div className="grid size-14 place-items-center rounded-2xl bg-background text-muted-foreground">
-                    <BookOpen className="size-6" />
-                </div>
-                <div className="text-sm font-medium text-muted-foreground">选择一篇文献开始阅读</div>
-                <div className="text-xs text-muted-foreground/70">
-                    从左侧列表选择文献查看详情，或导入新的 PDF
-                </div>
-                <Button onClick={openUpload} className="mt-2">
-                    <Plus className="size-4" />
-                    导入文献
-                </Button>
-            </div>
-        )
+        return <LiteratureEmptyState />
     }
 
     // 反向引用：扫笔记 cites 字段（文献 ID 匹配）

@@ -5,7 +5,7 @@ import { EditorContent, EditorContext, useEditor } from '@tiptap/react'
 import MainToolbarContent from './MainToolbarContent'
 import MobileToolbarContent from './MobileToolbarContent'
 import EditorHeader from '@/components/EditorHeader'
-import { BookOpen } from "lucide-react";
+import { NoteEmptyState } from '@/components/WorkbenchEmpty'
 
 // extensions
 import { StarterKit } from '@tiptap/starter-kit'
@@ -231,19 +231,10 @@ const Editor = () => {
         /* UI 重构：页头（chip/标题/meta + 格式化工具栏 + 编辑-预览）在 Provider 内，
            EditorHeader 通过 toolbar prop 承载 Tiptap 格式化按钮组（设计稿：标题下方） */
         <div className='flex h-full w-full flex-col overflow-hidden'>
-            {/* 未选中笔记 → 空状态页（不可输入；hooks 照常执行保持顺序） */}
+            {/* 未选中笔记 → 空状态页（设计稿 view-empty：HERO 插画 + 快捷操作 + 最近打开；
+                不可输入；hooks 照常执行保持顺序） */}
             {activeNoteId === undefined ? (
-                <div className='flex h-full flex-col items-center justify-center gap-3 px-6 text-center'>
-                    <div className='grid size-14 place-items-center rounded-2xl bg-background text-muted-foreground'>
-                        <BookOpen className='size-6' />
-                    </div>
-                    <div className='text-sm font-medium text-muted-foreground'>
-                        选择一篇笔记开始写作
-                    </div>
-                    <div className='max-w-[300px] text-xs leading-relaxed text-muted-foreground/70'>
-                        从左侧列表选择笔记，或点击「新建笔记」创建一篇；AI 问答与引用功能在选中笔记后可用。
-                    </div>
-                </div>
+                <NoteEmptyState />
             ) : (
                 <EditorContext.Provider value={{ editor }}>
                 <EditorHeader

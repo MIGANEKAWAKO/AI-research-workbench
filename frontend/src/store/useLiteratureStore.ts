@@ -57,6 +57,8 @@ interface LiteratureState {
     loadCollections: () => Promise<void>
     /** M2：新建文献集合（id 前端生成，名称去重） */
     addCollection: (name: string) => void
+    /** M2：重命名文献集合（名称去重；定义存 .kb/literature-collections.json，归属不变） */
+    renameCollection: (id: string, name: string) => void
     /** M2：删除集合（同步清理归属该集合文献的 collectionIds，逐篇 PUT） */
     deleteCollection: (id: string) => Promise<void>
     /** M2：移动文献到集合（collectionId 传 null = 移回未分类；PUT 幂等） */
@@ -114,6 +116,22 @@ export const useLiteratureStore = create<LiteratureState>((set, get) => ({
             return
         }
         const next = [...collections, { id: litCollectionId(), name: trimmed, createdAt: Date.now() }]
+        set({ collections: next, error: null })
+        void saveCollectionsFile(next).catch((e) => {
+            console.warn('文献集合保存失败:', e)
+            set({ error: '集合保存失败' })
+        })
+    },
+
+    renameCollection: (id, name) => {
+        const trimmed = name.trim()
+        if (!trimmed) return
+        const { collections } = get()
+        if (collections.some((c) => c.id !== id && c.name === trimmed)) {
+            set({ error: `集合「${trimmed}」已存在` })
+            return
+        }
+        const next = collections.map((c) => (c.id === id ? { ...c, name: trimmed } : c))
         set({ collections: next, error: null })
         void saveCollectionsFile(next).catch((e) => {
             console.warn('文献集合保存失败:', e)

@@ -238,8 +238,8 @@ const SideBar = () => {
                                 collapsed && 'h-[42px] flex-col justify-center gap-1',
                             )}
                         >
-                            <FileText className={cn('size-4 shrink-0', collapsed && 'size-[18px]')} />
-                            <span className={cn(collapsed ? 'text-[10px] leading-none' : 'hidden')}>笔记</span>
+                            <FileText className={cn('size-4 shrink-0', collapsed && 'size-[24px]')} />
+                            <span>笔记</span>
                         </button>
                         <button
                             onClick={() => setView('library')}
@@ -249,8 +249,8 @@ const SideBar = () => {
                                 collapsed && 'h-[42px] flex-col justify-center gap-1',
                             )}
                         >
-                            <BookOpen className={cn('size-4 shrink-0', collapsed && 'size-[18px]')} />
-                            <span className={cn(collapsed ? 'text-[10px] leading-none' : 'hidden')}>文献</span>
+                            <BookOpen className={cn('size-4 shrink-0', collapsed && 'size-[24px]')} />
+                            <span>文献</span>
                         </button>
                     </div>
 
@@ -303,8 +303,10 @@ const SideBar = () => {
                     ) : null}
                 </SidebarHeader>
 
-                {/* 折叠时只显示 Tab 按钮（设计稿 collapsed 隐藏 side-top 全部内容） */}
-                <SidebarContent className={cn('gap-0.5', collapsed && 'hidden')}>
+                {/* 折叠时列表内容不可见但保留布局占位（invisible 而非 hidden）：
+                    SidebarContent 的 flex-1 仍生效，底部折叠按钮始终贴在侧边栏最下侧。
+                    笔记模式加 px-3：列表项与侧边栏间距对齐文献列表（LiteratureList 根 px-3） */}
+                <SidebarContent className={cn('gap-0.5', collapsed && 'invisible', view === 'notes' && 'px-3')}>
                     {view === 'library' ? (
                         <LiteratureList />
                     ) : (

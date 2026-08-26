@@ -18,6 +18,7 @@ import { ASK_INSTRUCTIONS } from '@/lib/ai-instructions'
 import ReactMarkdown from 'react-markdown'
 import { fetchResearchTask } from '@/services/research'
 import ResearchTaskView from './ResearchTaskView'
+import { AiEmptyState } from './ai-empty-state'
 import type { ResearchEvent, ResearchTaskState } from '@/types/research'
 import { cn } from '@/lib/utils'
 
@@ -35,9 +36,7 @@ const AI_TASKS: { type: AiTaskType; label: string }[] = [
     { type: 'continue', label: '续写' },
 ]
 
-// UI 重构：设计稿快捷指令 chips（点击填入输入框）
-const QUICK_PROMPTS = ['总结当前笔记', '解释这段代码', '生成引用']
-
+// UI 重构：设计稿快捷指令 chips（已按用户要求清除，无实际功能）
 const TYPEWRITER_INTERVAL_MS = 24
 
 const AIPanel = () => {
@@ -529,14 +528,13 @@ const AIPanel = () => {
             {/* 消息区（设计稿 ai-messages：who 方块 + 气泡）
                 min-h-0：flex 子项收缩（消息再多也不撑破，输入区固定在底部） */}
             <ScrollArea className='min-h-0 flex-1'>
-                <div className='flex flex-col gap-3.5 p-4'>
+                {/* min-h-full：内容少时占满视口高度，让空状态 margin:auto 垂直居中 */}
+                <div className='flex min-h-full flex-col gap-3.5 p-4'>
                     {/* A6：研究任务进度区（过程展示；答案进消息流） */}
                     {researchMode && researchState && <ResearchTaskView state={researchState} />}
-                    {messages.length === 0 && (
-                        <p className='mt-10 text-center text-xs text-muted-foreground'>
-                            对话问答会检索你的知识库；在阅读器中提问则限定当前文献。
-                        </p>
-                    )}
+                    {/* 空状态：新建对话且未发送任何消息时展示（设计稿 aiEmpty 移植）；
+                        研究任务进行中（researchState 非空）时让位给进度视图 */}
+                    {messages.length === 0 && !researchState && <AiEmptyState />}
                     {messages.map((msg) => (
                         <div key={msg.id} className={`flex gap-2.5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                             <div
@@ -683,24 +681,6 @@ const AIPanel = () => {
                     </span>
                 </div>
 
-                {/* 快捷指令 chips（设计稿 quick-row，点击填入输入框；研究模式下隐藏） */}
-                {!researchMode && (
-                    <div className='flex flex-wrap gap-2'>
-                        {QUICK_PROMPTS.map((p) => (
-                            <button
-                                key={p}
-                                onClick={() => {
-                                    setInput(p)
-                                    inputRef.current?.focus()
-                                }}
-                                className='rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground'
-                            >
-                                {p}
-                            </button>
-                        ))}
-                    </div>
-                )}
-
                 {/* 输入框（设计稿 box：textarea + 蓝色发送按钮） */}
                 <div className='flex items-end gap-2 rounded-[10px] border border-border bg-background p-2.5'>
                     <textarea
@@ -723,7 +703,11 @@ const AIPanel = () => {
                         }}
                         disabled={isLoading || researchRunning || !input.trim()}
                         title='发送'
-                        className='grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-[filter] hover:brightness-110 disabled:opacity-40'
+                        /* 设计稿 .send-btn：32×32 / 圆角 8px / 纯色 var(--blue) 底 + 白色图标 /
+                           hover filter brightness(1.07)（静态稿原值，非 Tailwind 默认 1.1）。
+                           无 disabled 视觉变化：去掉 opacity 后按钮始终呈现设计稿纯蓝色
+                           （原 disabled:opacity-40 会让空输入时按钮发灰） */
+                        className='grid size-8 shrink-0 place-items-center rounded-[8px] bg-primary text-white transition-[filter] hover:brightness-[1.07]'
                     >
                         <Send className='size-4' />
                     </button>
