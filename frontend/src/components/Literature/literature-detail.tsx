@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BookOpen, ClipboardCopy, FileText, MoreHorizontal, Pencil, Star, Trash2 } from 'lucide-react'
+import { BookOpen, ClipboardCopy, FileText, Pencil, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -34,14 +34,16 @@ const STATUS_CYCLE = ['未读', '在读', '已读'] as const
 
 /**
  * 文献详情（F4 + UI 重构 Step 5，对齐设计稿 lit-detail）：
- * 页头（状态 chip + meta + 收藏/更多占位 + 大标题）→ divider → meta-row 三格卡片
+ * 页头（状态 chip + meta + × 关闭 + 大标题）→ divider → meta-row 三格卡片
  * （作者/期刊/年份）→ 元数据详情 → DOI 行（蓝色 mono）→ tags → 反向引用 →
  * action-row（阅读 PDF / 复制引用）→ 底部删除（AlertDialog 确认）。
- * 注：LiteratureEntry 无 abstract 字段（后端 B5 未抽取摘要），摘要块暂缺。
+ * 注：LiteratureEntry 无 abstract 字段（后端 B5 未抽取摘要），摘要块暂缺；
+ * 收藏/更多按钮暂未实现（代码注释保留，后续规划）。
  */
 export const LiteratureDetail = () => {
     const entries = useLiteratureStore((s) => s.entries)
     const activeId = useLiteratureStore((s) => s.activeId)
+    const setActive = useLiteratureStore((s) => s.setActive)
     const remove = useLiteratureStore((s) => s.remove)
     const openReader = useLiteratureStore((s) => s.openReader)
     const updateProgress = useLiteratureStore((s) => s.updateProgress)
@@ -127,7 +129,8 @@ export const LiteratureDetail = () => {
                         <span className="text-xs text-muted-foreground">
                             PDF · 被 {citedBy.length} 篇笔记引用
                         </span>
-                        <button
+                        {/* 收藏/更多暂不实现（后续规划），先注释保留；右上角改为 × 关闭当前文献 */}
+                        {/* <button
                             onClick={() => toast.info('收藏功能开发中')}
                             title="收藏"
                             className="grid size-[30px] place-items-center rounded-[7px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
@@ -140,6 +143,13 @@ export const LiteratureDetail = () => {
                             className="grid size-[30px] place-items-center rounded-[7px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
                         >
                             <MoreHorizontal className="size-4" />
+                        </button> */}
+                        <button
+                            onClick={() => setActive(null)}
+                            title="关闭文献"
+                            className="grid size-[30px] place-items-center rounded-[7px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                        >
+                            <X className="size-4" />
                         </button>
                     </div>
                 </div>

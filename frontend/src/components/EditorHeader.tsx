@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { List, MoreHorizontal, PenLine, Star } from 'lucide-react'
+import { List, PenLine, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useCurrentEditor } from '@tiptap/react'
 import {
@@ -31,9 +31,10 @@ function formatRelativeTime(ts: number): string {
 
 /**
  * 编辑器页头（UI 重构 Step 4，对齐设计稿 editor-header）：
- * chip（所属集合）+ meta（更新时间/字数）+ 收藏/更多占位 + 标题（点击重命名）
+ * chip（所属集合）+ meta（更新时间/字数）+ × 关闭当前笔记 + 标题（点击重命名）
  * + toolbar 行：格式化按钮组（prop 传入，Tiptap 工具）+ 编辑/预览 view-toggle。
  * 设计稿：工具栏位于标题下方（与标题同区域），下方有 divider 与正文隔开。
+ * 收藏/更多按钮暂未实现（代码注释保留，后续规划）。
  */
 const EditorHeader = ({ toolbar }: { toolbar?: React.ReactNode }) => {
     const activeNoteId = useNoteStore((s) => s.activeNoteId)
@@ -92,7 +93,8 @@ const EditorHeader = ({ toolbar }: { toolbar?: React.ReactNode }) => {
                     <span className="text-xs text-muted-foreground">
                         更新于 {formatRelativeTime(note.updatedAt)} · {wordCount.toLocaleString('zh-CN')} 字
                     </span>
-                    <button
+                    {/* 收藏/更多暂不实现（后续规划），先注释保留；右上角改为 × 关闭当前笔记 */}
+                    {/* <button
                         onClick={() => toast.info('收藏功能开发中')}
                         title="收藏"
                         className="grid size-[30px] place-items-center rounded-[7px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
@@ -105,6 +107,13 @@ const EditorHeader = ({ toolbar }: { toolbar?: React.ReactNode }) => {
                         className="grid size-[30px] place-items-center rounded-[7px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
                     >
                         <MoreHorizontal className="size-4" />
+                    </button> */}
+                    <button
+                        onClick={() => useNoteStore.getState().setActiveNote(undefined)}
+                        title="关闭笔记"
+                        className="grid size-[30px] place-items-center rounded-[7px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                    >
+                        <X className="size-4" />
                     </button>
                 </div>
             </div>

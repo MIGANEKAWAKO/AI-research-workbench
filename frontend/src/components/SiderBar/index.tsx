@@ -131,6 +131,29 @@ const SideBar = () => {
         toast.success('已重命名')
     }
 
+    // ---------- 重命名集合（Dialog，对齐文献集合/笔记重命名交互） ----------
+    const [renameColTarget, setRenameColTarget] = useState<{ id: number; name: string } | null>(null)
+    const [renameColValue, setRenameColValue] = useState('')
+
+    const handleRenameCollection = (e: React.MouseEvent, colId: number, colName: string) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setRenameColValue(colName)
+        setRenameColTarget({ id: colId, name: colName })
+    }
+
+    const submitRenameCollection = () => {
+        if (!renameColTarget) return
+        const newName = renameColValue.trim()
+        if (!newName) {
+            toast.error('名称不能为空')
+            return
+        }
+        useDataStore.getState().renameCollection(renameColTarget.id, newName)
+        setRenameColTarget(null)
+        toast.success('集合已重命名')
+    }
+
     // ---------- 删除（AlertDialog，笔记 / 集合共用） ----------
     const [deleteTarget, setDeleteTarget] = useState<{ type: 'note' | 'collection'; id: number; label: string } | null>(null)
 
@@ -331,7 +354,7 @@ const SideBar = () => {
                                                     <span className="ml-auto text-[11px] text-muted-foreground/70 group-hover/label:hidden">
                                                         {filteredNotes.filter((n) => n.collectionId === col.id).length}
                                                     </span>
-                                                    {/* hover 操作：新建笔记 + 删除集合 */}
+                                                    {/* hover 操作：新建笔记 + 重命名 + 删除集合 */}
                                                     <div className="ml-auto hidden items-center gap-0.5 group-hover/label:flex">
                                                         <button
                                                             onClick={(e) => handleCreate(e, col.id)}
@@ -339,6 +362,13 @@ const SideBar = () => {
                                                             title="在此集合下新建笔记"
                                                         >
                                                             <Plus className="size-3.5" />
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => handleRenameCollection(e, col.id!, col.name)}
+                                                            className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                                                            title="重命名集合"
+                                                        >
+                                                            <Pencil className="size-3.5" />
                                                         </button>
                                                         <button
                                                             onClick={(e) => handleDeleteCollection(e, col.id!, col.name)}
@@ -538,6 +568,29 @@ const SideBar = () => {
                             取消
                         </Button>
                         <Button onClick={submitRename}>保存</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 重命名集合 Dialog（笔记归属 collectionId 不变） */}
+            <Dialog open={renameColTarget !== null} onOpenChange={(o) => !o && setRenameColTarget(null)}>
+                <DialogContent className="w-[380px] max-w-full rounded-xl">
+                    <DialogHeader>
+                        <DialogTitle>重命名集合</DialogTitle>
+                    </DialogHeader>
+                    <Input
+                        value={renameColValue}
+                        onChange={(e) => setRenameColValue(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') submitRenameCollection()
+                        }}
+                        autoFocus
+                    />
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRenameColTarget(null)}>
+                            取消
+                        </Button>
+                        <Button onClick={submitRenameCollection}>保存</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

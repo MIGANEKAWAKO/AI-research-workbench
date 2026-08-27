@@ -90,6 +90,8 @@ interface DataState {
     refreshFromDisk: (skipNoteId?: number) => Promise<void>
 
     addCollection: (name: string) => void
+    /** 重命名集合（名称去重；定义存 .kb/collections.json，笔记归属 collectionId 不变） */
+    renameCollection: (id: number, name: string) => void
     deleteCollection: (id: number) => void
 
     moveNoteToCollection: (noteId: number, collectionId: number | undefined) => void
@@ -304,6 +306,21 @@ export const useDataStore = create<DataState>((set, get) => ({
         ]
         set({ collections })
         saveCollectionsFile(collections)
+            .then(() => set({ backendOnline: true }))
+            .catch((e) => {
+                console.error('集合写入失败:', e)
+                if (isNetworkError(e)) set({ backendOnline: false })
+            })
+    },
+
+    renameCollection: (id, name) => {
+        const trimmed = name.trim()
+        if (!trimmed) return
+        const { collections } = get()
+        if (collections.some((c) => c.id !== id && c.name === trimmed)) return
+        const next = collections.map((c) => (c.id === id ? { ...c, name: trimmed } : c))
+        set({ collections: next })
+        saveCollectionsFile(next)
             .then(() => set({ backendOnline: true }))
             .catch((e) => {
                 console.error('集合写入失败:', e)
