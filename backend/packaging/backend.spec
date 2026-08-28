@@ -22,7 +22,16 @@ from PyInstaller.utils.hooks import collect_all
 BACKEND_DIR = os.path.abspath(os.path.join(SPECPATH, ".."))
 
 datas, binaries, hiddenimports = [], [], []
-for pkg in ["chromadb", "uvicorn", "watchdog", "langchain_chroma", "langchain_openai"]:
+for pkg in [
+    "chromadb",
+    "uvicorn",
+    "watchdog",
+    "langchain_chroma",
+    "langchain_openai",
+    # tiktoken 编码插件是动态发现机制（pkgutil 扫 tiktoken_ext.*），静态分析收集不到；
+    # 缺失时报 "Unknown encoding cl100k_base / Plugins found: []" → 所有文档索引失败
+    "tiktoken_ext",
+]:
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b

@@ -172,6 +172,22 @@ def scan_and_index(force: bool = False) -> dict[str, Any]:
     # ---- 收尾 ----
     state["lastScan"] = datetime.now().isoformat(timespec="seconds")
     _save_state(state)
+    # P6 修复：索引失败可见化——errors 之前只进 API 响应，从不落日志，
+    # 导致"文献导入成功但库是空的"（embedding/tiktoken 等失败）无人察觉
+    if report["errors"]:
+        logger.error(
+            "索引扫描完成 但 %d 个文件失败: scanned=%d indexed=%d skipped=%d",
+            len(report["errors"]), report["scanned"], report["indexed"],
+            report["skipped"],
+        )
+        for err in report["errors"]:
+            logger.error("  索引失败 %s", err)
+    else:
+        logger.info(
+            "索引扫描完成 scanned=%d indexed=%d skipped=%d deleted=%d",
+            report["scanned"], report["indexed"], report["skipped"],
+            report["deleted"],
+        )
     report["totalChunks"] = sum(
         info.get("chunks", 0) for info in state["note"].values()
     ) + sum(info.get("chunks", 0) for info in state["paper"].values())
