@@ -7,11 +7,20 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 # 开发态直接运行本脚本时，backend/ 需在 sys.path（打包态由 PyInstaller pathex 处理）
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# 打包态：tiktoken 词表离线缓存（spec 已把 packaging/tiktoken-cache 打进 _MEIPASS）。
+# 必须在任何 chroma/tiktoken 使用前设置——否则回退到 Azure blob 下载（中国网络不稳定）。
+# 开发态不设置（走默认下载/本机缓存，行为不变）。
+if getattr(sys, "frozen", False):
+    os.environ.setdefault(
+        "TIKTOKEN_CACHE_DIR", str(Path(getattr(sys, "_MEIPASS", ".")) / "tiktoken-cache")
+    )
 
 import uvicorn
 

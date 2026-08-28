@@ -37,6 +37,10 @@ for pkg in [
     binaries += b
     hiddenimports += h
 
+# tiktoken 词表离线打包：cl100k_base 运行时从 Azure blob 下载（中国网络不稳定），
+# 预下载后随产物分发（run_server.py 设 TIKTOKEN_CACHE_DIR 指向 _MEIPASS/tiktoken-cache）
+datas += [("tiktoken-cache", "tiktoken-cache")]
+
 a = Analysis(
     ["run_server.py"],
     pathex=[BACKEND_DIR],
