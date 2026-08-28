@@ -30,4 +30,21 @@ def resolve_port() -> int:
 
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="127.0.0.1", port=resolve_port())
+    try:
+        from app import main  # noqa: PLC0415 延迟导入：让 try 覆盖完整启动链
+        from app.config import settings as _settings  # noqa: PLC0415
+
+        uvicorn.run(main.app, host="127.0.0.1", port=resolve_port())
+    except Exception:
+        # console=False 打包时无控制台：启动异常写 exe 旁 startup-error.log 便于排障
+        import traceback
+
+        from app.paths import app_data_dir
+
+        try:
+            (app_data_dir() / "startup-error.log").write_text(
+                traceback.format_exc(), encoding="utf-8"
+            )
+        except Exception:
+            pass
+        raise

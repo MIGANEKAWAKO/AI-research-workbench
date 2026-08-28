@@ -11,9 +11,15 @@
 - collect_all(chromadb/uvicorn/watchdog)：原生库 + 延迟 import 子模块 + 数据文件
 - onnxruntime 未安装（embedding 走 SiliconFlow API，不触发 chromadb 默认 embedding）
 - telemetry 已在 kb.py 构造点禁用（anonymized_telemetry=False）
+- 入口脚本必须对象引用（uvicorn.run(main.app)），字符串 "app.main:app" 无法被静态分析追踪
 """
 
+import os
+
 from PyInstaller.utils.hooks import collect_all
+
+# spec 内相对路径以 spec 目录为基准解析：显式推导 backend 根（pathex 需绝对路径）
+BACKEND_DIR = os.path.abspath(os.path.join(SPECPATH, ".."))
 
 datas, binaries, hiddenimports = [], [], []
 for pkg in ["chromadb", "uvicorn", "watchdog", "langchain_chroma", "langchain_openai"]:
@@ -23,11 +29,15 @@ for pkg in ["chromadb", "uvicorn", "watchdog", "langchain_chroma", "langchain_op
     hiddenimports += h
 
 a = Analysis(
-    ["packaging/run_server.py"],
-    pathex=["."],
+    ["run_server.py"],
+    pathex=[BACKEND_DIR],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports + [
+        # 应用包（入口脚本 from app import main 依赖；显式列出防静态分析遗漏）
+        "app",
+        "app.main",
+        "app.routers",
         # 纯 python 依赖（自动分析兜底，显式列出防动态 import 遗漏）
         "pypdf",
         "docx",
