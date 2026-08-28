@@ -8,6 +8,7 @@
 //!    "无法连接存储服务"降级提示）
 
 use std::net::TcpListener;
+#[cfg(debug_assertions)]
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -45,7 +46,8 @@ fn spawn_backend(app: &tauri::App, port: u16) -> std::io::Result<Child> {
         // 发布态：bundle resources 里的 onedir 产物（resources/backend-server/backend-server.exe）
         let exe = app
             .path()
-            .resource_dir()?
+            .resource_dir()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?
             .join("backend-server/backend-server.exe");
         let mut cmd = Command::new(exe);
         cmd.arg("--port")
