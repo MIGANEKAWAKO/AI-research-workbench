@@ -105,16 +105,22 @@ cd backend && .venv/Scripts/python -m pytest
 
 # 前端类型检查 + 构建
 cd frontend && npm run build
+
+# 桌面版：打包后端（PyInstaller onedir → backend/dist/backend-server/）
+cd backend && .venv/Scripts/pyinstaller packaging/backend.spec --noconfirm
+
+# 桌面版：构建 Tauri 壳 + Windows 安装包（NSIS，需 Rust 工具链）
+cd frontend && npm run tauri build
 ```
 
-GitHub Actions 会在每次 push / PR 自动运行以上检查（见 `.github/workflows/ci.yml`）。
+GitHub Actions 会在每次 push / PR 自动运行检查（见 `.github/workflows/ci.yml`）；打 `v*` 标签触发 Windows 安装包构建与 Release 草稿（见 `.github/workflows/release.yml`）。
 
 ## Roadmap
 
 - [x] M1：文献管理 / PDF 阅读 / 引用 / AI 问答 / 导出（B1-B8 + F1-F7）
 - [x] M2 功能线：高亮批注 / 划词翻译 / 阅读进度 / 集合导出 / watchdog SSE
-- [x] M2 产品化（部分）：对话记忆 / 本地缓存 / 启动向导 / 元数据编辑 / 索引自愈 / 日志
-- [ ] M2 产品化（剩余）：Tauri 桌面壳 + Windows 安装包 / 开源发布
+- [x] M2 产品化：对话记忆 / 本地缓存 / 启动向导 / 元数据编辑 / 索引自愈 / 日志 / 开源配套
+- [x] M2 发布：Tauri 2 桌面壳 + 后端 PyInstaller 打包 + Windows NSIS 安装包（`npm run tauri build`）
 
 ## 许可证
 
