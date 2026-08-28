@@ -10,9 +10,11 @@ from __future__ import annotations
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
-LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+from .paths import app_data_dir
+
+# 开发态 backend/logs，打包态 exe 同目录 logs/（P6：__file__ 在打包后指向临时目录）
+LOG_DIR = app_data_dir() / "logs"
 LOG_FILE = "app.log"
 MAX_BYTES = 1024 * 1024  # 1MB
 BACKUP_COUNT = 3

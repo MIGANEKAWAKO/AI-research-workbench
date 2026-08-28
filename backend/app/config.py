@@ -6,11 +6,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .paths import app_data_dir
 
-load_dotenv()
 
-# .env 文件路径（backend/.env；P1 向导写入配置用）
-ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+# .env 文件路径（开发态 backend/.env，打包态 exe 同目录；P1 向导写入配置用）
+ENV_PATH = app_data_dir() / ".env"
+
+# 显式加载指定路径的 .env：打包后 cwd 不确定，默认的 cwd 查找不可靠
+load_dotenv(ENV_PATH)
 
 
 def write_env(key: str, value: str) -> None:

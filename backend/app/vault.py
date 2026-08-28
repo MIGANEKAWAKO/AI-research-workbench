@@ -5,13 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 
 from .config import settings
+from .paths import app_data_dir
 
 
 def default_vault_path() -> Path:
-    """vault 路径优先级：.env VAULT_PATH → 开发默认 backend/vault（见 ADR-0001）。"""
+    """vault 路径优先级：.env VAULT_PATH → 开发默认 backend/vault（见 ADR-0001）。
+
+    打包态兜底为 exe 同目录 vault/（向导必填 VAULT_PATH，兜底极少触发）。
+    """
     if settings.vault_path:
         return Path(settings.vault_path)
-    return Path(__file__).resolve().parent.parent / "vault"
+    return app_data_dir() / "vault"
 
 
 def kb_root() -> Path:
