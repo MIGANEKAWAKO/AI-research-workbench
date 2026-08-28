@@ -19,6 +19,7 @@ from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
+from chromadb.config import Settings as ChromaSettings
 
 from .caching import TTLCache
 from .config import settings
@@ -92,10 +93,12 @@ def get_collection() -> Chroma:
     """
     global _collection
     if _collection is None:
+        # P6 隐私约定：禁用 chroma 匿名遥测（本地优先产品，数据不出本机）
         _collection = Chroma(
             collection_name=COLLECTION_NAME,
             embedding_function=_get_embeddings(),
             persist_directory=str(chroma_dir()),
+            client_settings=ChromaSettings(anonymized_telemetry=False),
         )
     return _collection
 
