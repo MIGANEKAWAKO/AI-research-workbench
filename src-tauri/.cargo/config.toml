@@ -1,0 +1,5 @@
+# 中国大陆网络适配：禁用 git 全局代理继承（cargo 会读取 git 的 http.proxy，
+# 若代理未运行（如 clash 未启动）cargo 将无法访问 crates.io。
+# 空 proxy = 直连；crates.io 直连不可达时可把本文件替换为 rsproxy.cn 镜像配置）
+[http]
+proxy = ""
