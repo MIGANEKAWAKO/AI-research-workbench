@@ -3,7 +3,7 @@
  * 状态接口只返回"是否已配置"（脱敏），key 明文不经过 GET。
  */
 
-const BASE_URL = 'http://localhost:3001'
+import { apiFetch } from './api'
 
 export interface ConfigStatus {
     configured: boolean
@@ -23,7 +23,7 @@ export interface TestResults {
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(url, init)
+    const response = await apiFetch(url, init)
     if (!response.ok) {
         let detail = `请求失败（${response.status}）`
         try {
@@ -38,7 +38,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const getConfigStatus = async (): Promise<ConfigStatus> => {
-    return request<ConfigStatus>(`${BASE_URL}/api/config`)
+    return request<ConfigStatus>(`/api/config`)
 }
 
 /** 写入配置（vault 路径 / API key / 请求地址；空字符串不写入） */
@@ -49,7 +49,7 @@ export const saveConfig = async (patch: {
     deepseekBaseUrl?: string
     siliconflowBaseUrl?: string
 }): Promise<ConfigStatus> => {
-    return request<ConfigStatus>(`${BASE_URL}/api/config`, {
+    return request<ConfigStatus>(`/api/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
@@ -66,7 +66,7 @@ export const testConnections = async (options?: {
     deepseekBaseUrl?: string
     siliconflowBaseUrl?: string
 }): Promise<TestResults> => {
-    return request<TestResults>(`${BASE_URL}/api/config/test`, {
+    return request<TestResults>(`/api/config/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(options ?? {}),

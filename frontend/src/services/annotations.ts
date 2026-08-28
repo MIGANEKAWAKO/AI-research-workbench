@@ -1,4 +1,5 @@
 import type { PdfAnnotation } from '@/types'
+import { apiFetch } from './api'
 
 /**
  * 高亮批注持久化（M2 A1）。
@@ -7,7 +8,6 @@ import type { PdfAnnotation } from '@/types'
  * 与 literature.ts 同款错误约定：非 2xx → throw Error(后端 detail)，UI 直接展示。
  */
 
-const BASE_URL = 'http://localhost:3001'
 const ANNOTATIONS_PATH = '.kb/annotations.json'
 
 /** 文件结构带版本号：未来结构变更可在此迁移，不破坏旧文件 */
@@ -17,8 +17,8 @@ interface AnnotationsFile {
 }
 
 export async function loadAnnotations(): Promise<PdfAnnotation[]> {
-    const response = await fetch(
-        `${BASE_URL}/api/fs/read?path=${encodeURIComponent(ANNOTATIONS_PATH)}`
+    const response = await apiFetch(
+        `/api/fs/read?path=${encodeURIComponent(ANNOTATIONS_PATH)}`
     )
     if (response.status === 404) return [] // 首次使用：文件不存在 = 无批注
     if (!response.ok) {
@@ -41,8 +41,8 @@ export async function loadAnnotations(): Promise<PdfAnnotation[]> {
 
 export async function saveAnnotations(annotations: PdfAnnotation[]): Promise<void> {
     const file: AnnotationsFile = { version: 1, annotations }
-    const response = await fetch(
-        `${BASE_URL}/api/fs/write?path=${encodeURIComponent(ANNOTATIONS_PATH)}`,
+    const response = await apiFetch(
+        `/api/fs/write?path=${encodeURIComponent(ANNOTATIONS_PATH)}`,
         {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

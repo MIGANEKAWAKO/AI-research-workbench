@@ -5,7 +5,7 @@
  * 与 literature.ts 同款错误约定：非 2xx → throw Error(后端 detail)。
  */
 
-const BASE_URL = 'http://localhost:3001'
+import { apiFetch } from './api'
 
 export type ReferenceFormat = 'gbt7714' | 'apa' | 'ieee'
 
@@ -19,7 +19,7 @@ export const exportReferences = async (
     format: ReferenceFormat,
     options: ExportOptions
 ): Promise<void> => {
-    const response = await fetch(`${BASE_URL}/api/export/references`, {
+    const response = await apiFetch(`/api/export/references`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -36,7 +36,7 @@ export const exportReferences = async (
 
 /** BibTeX 下载（.bib） */
 export const exportBibtex = async (options: ExportOptions): Promise<void> => {
-    const response = await fetch(`${BASE_URL}/api/export/bibtex`, {
+    const response = await apiFetch(`/api/export/bibtex`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ collectionIds: options.collectionIds, asFile: true }),

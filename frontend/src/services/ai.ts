@@ -1,5 +1,7 @@
 export type AiTaskType = 'summarize' | 'polish' | 'continue'
 
+import { apiFetch } from './api'
+
 /**
  * F7：调 /api/chat（B7 起对话模式自动做 RAG 检索注入）。
  * - taskType 有值 → 任务模式（处理 text，无 RAG）
@@ -24,7 +26,7 @@ export const fetchAiResponse = async (
   // M2 C2 联调对齐：后端解析 camelCase conversationId
   if (conversationId) body.conversationId = conversationId
 
-  const response = await fetch('http://localhost:3001/api/chat', {
+  const response = await apiFetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

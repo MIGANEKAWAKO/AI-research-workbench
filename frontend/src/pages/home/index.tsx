@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Bot } from 'lucide-react';
 import { SetupWizard } from '@/components/SetupWizard';
 import { getConfigStatus } from '@/services/config';
+import { apiBase } from '@/services/api';
 
 const Home = () => {
     const isAiPanelOpen = useNoteStore((state) => state.isAiPanelOpen);
@@ -76,6 +77,7 @@ const Home = () => {
         let es: EventSource | null = null
         let pollTimer: ReturnType<typeof setInterval> | null = null
         let sseOk = false
+        let cancelled = false
 
         const refreshAll = () => {
             useDataStore.getState().refreshFromDisk(activeNoteIdRef.current)
@@ -92,27 +94,33 @@ const Home = () => {
             pollTimer = setInterval(refreshAll, 30_000)
         }
 
-        es = new EventSource('http://localhost:3001/api/events')
-        es.onopen = () => {
-            sseOk = true
-            stopPoll()
-        }
-        // 断线/重连中（EventSource 内置自动重连）→ 轮询兜底
-        es.onerror = () => {
-            sseOk = false
-            startPoll()
-        }
-        es.onmessage = (e) => {
-            if (!sseOk) return
-            try {
-                const data = JSON.parse(e.data) as { type?: string }
-                if (data.type === 'vault.changed') refreshAll()
-            } catch {
-                // 非 JSON 帧忽略（心跳是注释帧，不会触发 onmessage，此处仅防御）
+        // P6：EventSource 是同步构造，地址需先 await apiBase()（Tauri 动态端口）
+        void (async () => {
+            const base = await apiBase()
+            if (cancelled) return
+            es = new EventSource(`${base}/api/events`)
+            es.onopen = () => {
+                sseOk = true
+                stopPoll()
             }
-        }
+            // 断线/重连中（EventSource 内置自动重连）→ 轮询兜底
+            es.onerror = () => {
+                sseOk = false
+                startPoll()
+            }
+            es.onmessage = (e) => {
+                if (!sseOk) return
+                try {
+                    const data = JSON.parse(e.data) as { type?: string }
+                    if (data.type === 'vault.changed') refreshAll()
+                } catch {
+                    // 非 JSON 帧忽略（心跳是注释帧，不会触发 onmessage，此处仅防御）
+                }
+            }
+        })()
 
         return () => {
+            cancelled = true
             es?.close()
             stopPoll()
         }

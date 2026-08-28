@@ -1,5 +1,6 @@
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { apiFetch } from './api'
 
 /**
  * F5 PDF 加载服务（pdfjs-dist 6.x）。
@@ -17,16 +18,14 @@ GlobalWorkerOptions.workerSrc = new URL(
     import.meta.url
 ).toString()
 
-const BASE_URL = 'http://localhost:3001'
-
 /**
  * 拉取 PDF 二进制并交给 pdf.js 解析。
  * @param pdfPath vault 内相对路径（LiteratureEntry.pdfPath）
  * @returns 已解析的 PDF 文档代理（含 numPages / getPage）
  */
 export async function loadPdfDocument(pdfPath: string): Promise<PDFDocumentProxy> {
-    const response = await fetch(
-        `${BASE_URL}/api/fs/file?path=${encodeURIComponent(pdfPath)}`
+    const response = await apiFetch(
+        `/api/fs/file?path=${encodeURIComponent(pdfPath)}`
     )
     if (!response.ok) {
         // 后端错误约定：HTTP 状态码 + {"detail": "原因"}（与 literature.ts 同款）

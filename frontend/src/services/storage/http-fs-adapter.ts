@@ -1,4 +1,5 @@
 import type { FsEntry, StorageAdapter } from './types'
+import { apiFetch } from '../api'
 
 /**
  * HttpFsAdapter：StorageAdapter 的 HTTP 实现（开发期）。
@@ -16,8 +17,6 @@ import type { FsEntry, StorageAdapter } from './types'
  * - 非 2xx 一律 throw Error(后端 detail)，成功才返回业务数据
  */
 
-const BASE_URL = 'http://localhost:3001'
-
 export class HttpFsAdapter implements StorageAdapter {
     /**
      * 统一请求入口
@@ -32,8 +31,8 @@ export class HttpFsAdapter implements StorageAdapter {
         path: string,
         body?: unknown
     ): Promise<T> {
-        const url = `${BASE_URL}/api/fs/${endpoint}?path=${encodeURIComponent(path)}`
-        const response = await fetch(url, {
+        const url = `/api/fs/${endpoint}?path=${encodeURIComponent(path)}`
+        const response = await apiFetch(url, {
             method: httpMethod,
             headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
             body: body !== undefined ? JSON.stringify(body) : undefined,

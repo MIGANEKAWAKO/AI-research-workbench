@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { open } from '@tauri-apps/plugin-dialog'
 import {
     Check,
     ChevronLeft,
@@ -14,12 +15,13 @@ import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { saveConfig, testConnections, type TestResults } from '@/services/config'
+import { isTauri } from '@/services/api'
 import { cn } from '@/lib/utils'
 
 /**
  * M2 P1：首次启动向导。
  * 三步：① vault 目录 ② API key 配置 ③ 连通性测试 → 完成（保存配置，进入应用）。
- * 开发期浏览器：vault 用文本输入（Tauri 版将支持系统目录选择器，位置已预留）。
+ * 开发期浏览器：vault 用文本输入；Tauri 桌面版（P6）用系统目录选择器（plugin-dialog）。
  * key 可跳过（未配置时 AI 功能不可用，文献管理正常）；测试失败不阻断完成。
  */
 
@@ -38,6 +40,20 @@ export const SetupWizard = ({ onDone }: { onDone: () => void }) => {
     const [saving, setSaving] = useState(false)
 
     const canNext = step === 0 ? vaultPath.trim().length > 0 : true
+
+    // P6：Tauri 桌面版系统目录选择器（浏览器模式保留文本输入）
+    const handlePickVault = async () => {
+        try {
+            const selected = await open({
+                directory: true,
+                multiple: false,
+                title: '选择数据目录（vault）',
+            })
+            if (typeof selected === 'string') setVaultPath(selected)
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : '选择目录失败')
+        }
+    }
 
     const handleTest = async () => {
         setTesting(true)
@@ -155,15 +171,23 @@ export const SetupWizard = ({ onDone }: { onDone: () => void }) => {
                         </div>
                         <p className="text-xs leading-relaxed text-muted-foreground">
                             所有笔记、PDF 与知识库数据都存放在这个文件夹中，推荐使用空目录或新建目录。
-                            桌面版将支持系统目录选择器；浏览器开发版请手动输入路径。
+                            {isTauri() ? '点击"选择文件夹"使用系统目录选择器。' : '浏览器开发版请手动输入路径。'}
                         </p>
-                        <Input
-                            value={vaultPath}
-                            onChange={(e) => setVaultPath(e.target.value)}
-                            placeholder="例如 D:\Research\my-vault"
-                            className="font-mono text-xs"
-                            autoFocus
-                        />
+                        <div className="flex gap-2">
+                            <Input
+                                value={vaultPath}
+                                onChange={(e) => setVaultPath(e.target.value)}
+                                placeholder="例如 D:\Research\my-vault"
+                                className="min-w-0 flex-1 font-mono text-xs"
+                                autoFocus
+                            />
+                            {isTauri() && (
+                                <Button variant="outline" onClick={handlePickVault} className="shrink-0">
+                                    <FolderOpen className="size-4" />
+                                    选择文件夹
+                                </Button>
+                            )}
+                        </div>
                     </div>
                 )}
 

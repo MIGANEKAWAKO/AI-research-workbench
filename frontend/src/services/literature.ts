@@ -1,14 +1,13 @@
 import type { LiteratureEntry } from '@/types'
+import { apiFetch } from './api'
 
 /**
  * 文献 API 封装（B5：/api/documents，见 docs/后端接口文档.md §3）。
  * 与 HttpFsAdapter 同款错误约定：非 2xx → throw Error(后端 detail)，UI 直接展示。
  */
 
-const BASE_URL = 'http://localhost:3001'
-
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(url, init)
+    const response = await apiFetch(url, init)
     if (!response.ok) {
         let detail = `请求失败（${response.status}）`
         try {
@@ -24,7 +23,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 /** 文献列表（后端已按 importedAt 倒序） */
 export const listLiterature = async (): Promise<LiteratureEntry[]> => {
-    const data = await request<{ entries: LiteratureEntry[] }>(`${BASE_URL}/api/documents`)
+    const data = await request<{ entries: LiteratureEntry[] }>(`/api/documents`)
     return data.entries
 }
 
@@ -41,7 +40,7 @@ export const importLiterature = async (
     form.append('file', file)
     if (doi?.trim()) form.append('doi', doi.trim())
     if (arxivId?.trim()) form.append('arxivId', arxivId.trim())
-    return request<LiteratureEntry>(`${BASE_URL}/api/documents`, {
+    return request<LiteratureEntry>(`/api/documents`, {
         method: 'POST',
         body: form,
     })
@@ -49,7 +48,7 @@ export const importLiterature = async (
 
 /** 删除文献（PDF + 索引 + literature.json 三连清理，后端处理） */
 export const deleteLiterature = async (id: string): Promise<void> => {
-    await request<{ ok: boolean }>(`${BASE_URL}/api/documents/${id}`, {
+    await request<{ ok: boolean }>(`/api/documents/${id}`, {
         method: 'DELETE',
     })
 }
@@ -63,7 +62,7 @@ export const updateLiteratureProgress = async (
     patch: { status?: string; lastPage?: number }
 ): Promise<LiteratureEntry> => {
     return request<LiteratureEntry>(
-        `${BASE_URL}/api/documents/${id}/progress`,
+        `/api/documents/${id}/progress`,
         {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -94,7 +93,7 @@ export const updateLiteratureMetadata = async (
     id: string,
     patch: LiteraturePatch
 ): Promise<LiteratureEntry> => {
-    return request<LiteratureEntry>(`${BASE_URL}/api/documents/${id}`, {
+    return request<LiteratureEntry>(`/api/documents/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),

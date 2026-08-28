@@ -1,4 +1,5 @@
 import type { ResearchEvent } from '@/types/research'
+import { apiFetch } from './api'
 
 /**
  * A6：发起研究任务（POST /api/research/tasks，SSE 事件流）。
@@ -23,7 +24,7 @@ export const fetchResearchTask = async (
   // M2 C2 联调对齐：后端解析 camelCase conversationId
   if (body.conversationId) payload.conversationId = body.conversationId
 
-  const response = await fetch('http://localhost:3001/api/research/tasks', {
+  const response = await apiFetch('/api/research/tasks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

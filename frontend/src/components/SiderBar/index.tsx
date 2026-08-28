@@ -246,7 +246,7 @@ const SideBar = () => {
                 <SidebarHeader className="gap-3 px-3 pt-4 pb-2">
                     {backendOnline === false && (
                         <div className="mb-1 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                            ⚠ 无法连接存储服务（localhost:3001）<br />
+                            ⚠ 无法连接存储服务<br />
                             笔记不会被保存，请先启动后端
                         </div>
                     )}
