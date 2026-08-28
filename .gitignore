@@ -26,3 +26,6 @@ backend/vault/
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# P6 É³Ïä cargo »º´æ£¨±¾»á»°ÍøÂç workaround£©
+.cargo-home/
