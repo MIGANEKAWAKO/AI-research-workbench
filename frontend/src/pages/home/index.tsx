@@ -102,6 +102,10 @@ const Home = () => {
             es.onopen = () => {
                 sseOk = true
                 stopPoll()
+                // 修复（P6 验收）：后端就绪/重连成功时立即刷新一次——
+                // 启动竞态（loadAll 先于后端就绪失败 → backendOnline=false 警告残留）
+                // 不能只停轮询不恢复状态；refreshFromDisk 成功会置 backendOnline=true
+                refreshAll()
             }
             // 断线/重连中（EventSource 内置自动重连）→ 轮询兜底
             es.onerror = () => {
