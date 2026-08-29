@@ -134,9 +134,19 @@ async def _build_messages(payload: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(text, str) or not text.strip():
             return {"error": MISSING_TEXT_ERROR}
 
+        # P6 优化：任务模式 + docId（单篇阅读语境）→ 注入该文献检索内容。
+        # 原设计任务模式只处理用户提供的文本（编辑器划词总结不传 docId，行为不变）；
+        # 但用户在单篇问答里点"总结"期望总结当前文献——无注入时模型反馈"没有提供任何内容"。
+        doc_id = payload.get("docId")
+        rag_text = ""
+        if doc_id:
+            rag_text = await anyio.to_thread.run_sync(
+                build_rag_context, text.strip(), doc_id
+            )
+
         return {
             "messages": [
-                {"role": "system", "content": prompt},
+                {"role": "system", "content": prompt + rag_text},
                 *history,
                 {"role": "user", "content": text.strip()},
             ],
