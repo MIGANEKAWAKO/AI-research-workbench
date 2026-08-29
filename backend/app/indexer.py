@@ -214,7 +214,12 @@ def unmark_paper_indexed(pdf_rel: str) -> None:
 
 
 def get_index_status() -> dict[str, Any]:
-    """索引健康度：chunk 数、已索引/未索引文件、上次扫描时间。"""
+    """索引健康度：chunk 数、已索引/未索引文件、上次扫描时间。
+
+    P6 修复：chunks 优先用 chroma 真实计数（index_state 只是记账，
+    删库自愈后可能"有账无库"——如 8-28 删库后每次扫描 skipped，609 假象）；
+    chroma 不可用时回退记账值（避免拖慢 status 轮询）。
+    """
     vault = default_vault_path()
     state = _load_state()
     indexed_notes = len(state["note"])
@@ -231,10 +236,13 @@ def get_index_status() -> dict[str, Any]:
         if entry.pdfPath not in state["paper"]:
             unindexed.append(entry.pdfPath)
 
+    recorded_chunks = sum(
+        info.get("chunks", 0)
+        for info in list(state["note"].values()) + list(state["paper"].values())
+    )
+    real_chunks = kb.count_chunks()
     return {
-        "chunks": sum(info.get("chunks", 0)
-                      for info in list(state["note"].values())
-                      + list(state["paper"].values())),
+        "chunks": real_chunks if real_chunks >= 0 else recorded_chunks,
         "indexedNotes": indexed_notes,
         "indexedPapers": indexed_papers,
         "unindexedFiles": unindexed,

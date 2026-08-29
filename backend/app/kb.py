@@ -115,6 +115,18 @@ def heal_collection() -> None:
     logger.warning("chroma 索引已删除，等待全量重建: %s", chroma_dir())
 
 
+def count_chunks() -> int:
+    """chroma 集合真实 chunk 数；不可用（未配置 key/索引损坏）返回 -1。
+
+    P6：index_state 只是记账（删库自愈后可能"有账无库"），
+    kb/status 的 chunks 应优先用真实值，避免假象。
+    """
+    try:
+        return get_collection()._collection.count()
+    except Exception:
+        return -1
+
+
 def extract_pdf_pages(pdf_path: str | Path) -> list[str]:
     """pypdf 逐页抽取文本，保留页边界（块元数据 page 依赖它）。"""
     reader = PdfReader(str(pdf_path))
