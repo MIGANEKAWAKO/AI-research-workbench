@@ -127,6 +127,22 @@ def count_chunks() -> int:
         return -1
 
 
+def get_document_chunks(doc_id: str) -> list[Document]:
+    """按 docId 取该文档的全部 chunk（结构感知检索用：章节标签文本匹配）。
+
+    与 retrieve 的差异：不做相似度排序，全量返回——供 rag 按
+    "摘要/引言/方法/实验/结论"等章节关键词做文本匹配注入，
+    绕过"意图型 query 向量命中不稳定"的问题（单篇问答摘要提问实测）。
+    """
+    got = get_collection()._collection.get(
+        where={"docId": doc_id}, include=["documents", "metadatas"]
+    )
+    return [
+        Document(page_content=t, metadata=m)
+        for t, m in zip(got.get("documents") or [], got.get("metadatas") or [])
+    ]
+
+
 def extract_pdf_pages(pdf_path: str | Path) -> list[str]:
     """pypdf 逐页抽取文本，保留页边界（块元数据 page 依赖它）。"""
     reader = PdfReader(str(pdf_path))
