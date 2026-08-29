@@ -75,15 +75,30 @@ const AIPanel = () => {
     const appendAiContent = useConversationStore((s) => s.appendAiContent)
 
     // M2 C3：面板打开时确保有可用会话（首次拉取列表；无会话则自动新建）
+    // P6 优化：已有"未开始的空对话"（默认标题 + 0 消息）时直接进入，不再新建——
+    // 否则每次打开应用都会堆积空"新对话"；全部会话都有内容才新建。
     useEffect(() => {
         if (!isAiPanelOpen) return
         void (async () => {
             await loadConversations()
-            if (!useConversationStore.getState().activeId) {
-                await useConversationStore.getState().create()
+            const { activeId, conversations, messagesByConv } =
+                useConversationStore.getState()
+            if (activeId) return
+            const idle = conversations.find((c) => {
+                // 默认标题（新对话/空）且无消息 = 未开始的空对话，可复用
+                if (c.title && c.title !== '新对话') return false
+                const localMsgs = messagesByConv[c.id]
+                if (localMsgs && localMsgs.length > 0) return false
+                if (typeof c.messageCount === 'number' && c.messageCount > 0) return false
+                return true
+            })
+            if (idle) {
+                await selectConversation(idle.id)
+                return
             }
+            await createConversation()
         })()
-    }, [isAiPanelOpen, loadConversations])
+    }, [isAiPanelOpen, loadConversations, selectConversation, createConversation])
 
     // A6：研究任务模式（与任务模式互斥；过程进 ResearchTaskView，答案进消息流）
     const [researchMode, setResearchMode] = useState(false)
@@ -588,23 +603,24 @@ const AIPanel = () => {
                                         ),
                                         li: ({ children }) => <li>{children}</li>,
                                         // 块级代码：语言类名存在（pre > code.language-*）
+                                        // bg-foreground/10：跟随主题（原 bg-black/10 深色主题下不可见）
                                         code: ({ className, children }) =>
                                             className ? (
                                                 <code
                                                     className={cn(
-                                                        'block overflow-x-auto rounded-md bg-black/10 p-2 font-mono text-[12.5px]',
+                                                        'block overflow-x-auto rounded-md bg-foreground/10 p-2 font-mono text-[12.5px]',
                                                         className
                                                     )}
                                                 >
                                                     {children}
                                                 </code>
                                             ) : (
-                                                <code className='rounded bg-black/10 px-1 py-0.5 font-mono text-[12px]'>
+                                                <code className='rounded bg-foreground/10 px-1 py-0.5 font-mono text-[12px]'>
                                                     {children}
                                                 </code>
                                             ),
                                         pre: ({ children }) => (
-                                            <pre className='my-1.5 rounded-md bg-black/10 p-2 last:mb-0'>
+                                            <pre className='my-1.5 rounded-md bg-foreground/10 p-2 last:mb-0'>
                                                 {children}
                                             </pre>
                                         ),

@@ -150,7 +150,12 @@ def extract_pdf_pages(pdf_path: str | Path) -> list[str]:
 
 
 def split_pages(pages: list[str]) -> list[Document]:
-    """每页独立分块，块不跨页，metadata.page = 页号（从 1 起）。"""
+    """每页独立分块，块不跨页，metadata.page = 页号（从 1 起）。
+
+    P6 优化：分块后做列表感知合并——splitter 的 \n 分隔会把无序/有序列表
+    从中间切断（标题行+前几项一个 chunk、其余项下一个 chunk），检索命中
+    标题 chunk 时模型看不到完整列表（实测：5 种编排模式被切成两块）。
+    """
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
@@ -161,7 +166,26 @@ def split_pages(pages: list[str]) -> list[Document]:
         for chunk in splitter.split_text(page_text):
             if chunk.strip():
                 docs.append(Document(page_content=chunk, metadata={"page": page_no}))
-    return docs
+    return _merge_list_chunks(docs)
+
+
+def _merge_list_chunks(chunks: list[Document]) -> list[Document]:
+    """列表感知合并：chunk 以列表项开头（- / * / 数字. 等）时并入前一 chunk。
+
+    切分点落在列表中间时，后续 chunk 以列表项开头——与前一 chunk 合并
+    保证"标题行 + 完整列表项"落在同一块。列表项通常较短，合并后略超
+    CHUNK_SIZE 可接受（完整性优先）。
+    """
+    if len(chunks) < 2:
+        return chunks
+    merged: list[Document] = []
+    for chunk in chunks:
+        stripped = chunk.page_content.lstrip()
+        if merged and stripped.startswith(("- ", "* ", "+ ", "1. ", "2. ")):
+            merged[-1].page_content += "\n" + chunk.page_content
+        else:
+            merged.append(chunk)
+    return merged
 
 
 def upsert_document(

@@ -52,6 +52,8 @@ export interface Conversation {
     title: string
     createdAt: string
     updatedAt: string
+    /** 后端列表返回的消息数（P6：空对话复用判定用；本地降级会话无此字段） */
+    messageCount?: number
 }
 
 /** 会话消息（后端持久形态：role 为 user/assistant，无前端 ai 别名） */
