@@ -183,9 +183,10 @@ const AIPanel = () => {
 
             // 单篇限定 = 正在阅读的文献（readerId）；无阅读器 = 全局 RAG
             const docId = readerId ?? undefined
-            // noteContext：activeNoteId 占位改为当前笔记标题（后端注入 system prompt）
+            // C1（P6 验收）：单篇文献问答时注入"当前笔记"会干扰模型（回答出现
+            // "根据您提供的笔记内容"——笔记上下文与文献问答无关）；全局问答保留标题
             const noteContext =
-                activeNoteId !== undefined
+                docId === undefined && activeNoteId !== undefined
                     ? `当前笔记：${notes.find((n) => n.id === activeNoteId)?.title ?? ''}`
                     : ''
 
