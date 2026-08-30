@@ -15,6 +15,14 @@
 | 🛡 本地优先 | vault 普通文件夹即数据源（.md 笔记可被 Obsidian/VS Code 打开）；watchdog 实时感知外部修改；索引损坏自动重建；滚动日志 |
 | 🖥 桌面版 | Tauri 2 壳 + PyInstaller 后端，Windows NSIS 安装包，动态端口、退出联动 |
 
+## 界面预览
+
+![主界面](./screenshot-1.png)
+
+![文献阅读](./screenshot-2.png)
+
+![AI 问答](./screenshot-3.png)
+
 ## 架构总览
 
 ```mermaid
