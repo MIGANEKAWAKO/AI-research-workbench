@@ -1,4 +1,4 @@
-# 依赖与构建产物
+﻿# 依赖与构建产物
 node_modules/
 dist/
 dist-ssr/
@@ -19,9 +19,21 @@ npm-debug.log*
 .vite/
 eslintcache/
 .kb/
+backend/vault/
 
 # 编辑器
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# 本地临时目录
+.tmp-*/
+.tmp-pip/
+.cargo-home/
+
+# 私人文件（不入库）
+我的简历*.md
+我的简历*.docx
+docs/简历包装/
+docs/Research Agent最小改造方案.md

@@ -9,7 +9,7 @@ export const DroppableCollection = ({ id, children }: { id: number | 'inbox'; ch
     return (
         <div 
             ref={setNodeRef} 
-            className={`rounded-md transition-colors ${isOver ? 'bg-purple-100/50' : ''}`}
+            className={`rounded-md transition-colors ${isOver ? 'bg-primary/10' : ''}`}
         >
             {children}
         </div>

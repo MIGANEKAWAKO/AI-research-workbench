@@ -1,0 +1,42 @@
+/* ============================================================
+ * AI 面板空状态——从静态设计稿 知微-科研工作台.html 的
+ * id="aiEmpty" 区域移植（对话气泡插画 + 标题 + 副文案）。
+ *
+ * 色板映射（作用域内变量，SVG 内 var() 原样可用）：
+ *   surface=card  text-3=muted-foreground/72  blue=primary
+ *   blue-2=primary/白混合  amber=warning
+ * ============================================================ */
+.ai-empty {
+    /* 作用域内色板映射（--border 全局已有，无需重定义） */
+    --surface: var(--card);
+    --text-3: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
+    --blue: var(--primary);
+    --blue-2: color-mix(in srgb, var(--primary) 72%, white);
+    --amber: var(--warning);
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 10px;
+    padding: 26px 18px;
+    /* 设计稿 margin: auto 0：flex 容器中上下吸收剩余空间 → 垂直居中 */
+    margin: auto 0;
+}
+.ai-empty-hero {
+    width: 132px;
+    height: 124px;
+    margin-bottom: 2px;
+}
+.ai-empty-title {
+    font-size: 15px;
+    font-weight: 650;
+    color: var(--foreground);
+}
+.ai-empty-sub {
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--text-3);
+    max-width: 236px;
+}

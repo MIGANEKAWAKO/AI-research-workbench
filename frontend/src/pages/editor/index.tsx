@@ -4,7 +4,8 @@ import { useNoteStore } from '@/store/useNoteStore'
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react'
 import MainToolbarContent from './MainToolbarContent'
 import MobileToolbarContent from './MobileToolbarContent'
-import { Bot } from "lucide-react";
+import EditorHeader from '@/components/EditorHeader'
+import { NoteEmptyState } from '@/components/WorkbenchEmpty'
 
 // extensions
 import { StarterKit } from '@tiptap/starter-kit'
@@ -15,15 +16,21 @@ import { Typography } from '@tiptap/extension-typography'
 import { Highlight } from '@tiptap/extension-highlight'
 import { Subscript } from '@tiptap/extension-subscript'
 import { Superscript } from '@tiptap/extension-superscript'
+import { Placeholder } from '@tiptap/extension-placeholder'
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableHeader } from '@tiptap/extension-table-header'
+import { TableCell } from '@tiptap/extension-table-cell'
 import { Selection } from '@tiptap/extensions'
 import { Markdown } from 'tiptap-markdown'
-
-// UI
-import { Toolbar } from '@/components/tiptap-ui-primitive/toolbar'
 
 // node
 import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension'
 import { HorizontalRule } from '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension'
+import { Callout } from '@/components/tiptap-node/callout-node/callout-node-extension'
+import { Cite } from '@/components/tiptap-node/cite-node/cite-node-extension'
+import { CitationList } from '@/components/CitationList'
+import { collectCiteIds } from '@/lib/citation'
 import '@/components/tiptap-node/blockquote-node/blockquote-node.scss'
 import '@/components/tiptap-node/code-block-node/code-block-node.scss'
 import '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss'
@@ -31,11 +38,12 @@ import '@/components/tiptap-node/list-node/list-node.scss'
 import '@/components/tiptap-node/image-node/image-node.scss'
 import '@/components/tiptap-node/heading-node/heading-node.scss'
 import '@/components/tiptap-node/paragraph-node/paragraph-node.scss'
+import '@/components/tiptap-node/callout-node/callout-node.scss'
+import '@/components/tiptap-node/table-node/table-node.scss'
+import '@/styles/editor-content.scss'
 
 // hooks
 import { useIsBreakpoint } from '@/hooks/use-is-breakpoint'
-import { useWindowSize } from '@/hooks/use-window-size'
-import { useCursorVisibility } from '@/hooks/use-cursor-visibility'
 
 // Lib
 import { handleImageUpload, MAX_FILE_SIZE } from '@/lib/tiptap-utils'
@@ -46,11 +54,8 @@ import '@/components/tiptap-templates/simple/simple-editor.scss'
 const Editor = () => {
     const { saveNote, getNote } = useNotes()
     const activeNoteId = useNoteStore((state) => state.activeNoteId)
-    const toggleAi = useNoteStore((state) => state.toggleAiPanel)
-    const isOpen = useNoteStore((state) => state.isAiPanelOpen)
 
     const isMobile = useIsBreakpoint()
-    const { height } = useWindowSize()
     const [mobileView, setMobileView] = useState<'main' | 'highlighter' | 'link'>('main')
     const toolbarRef = useRef<HTMLDivElement>(null)
 
@@ -75,19 +80,18 @@ const Editor = () => {
                 const existingNote = await getNote(targetId)
                 if (!existingNote) return
 
-                const content = editorInstance.getHTML()
-                const firstLine =
-                    editorInstance
-                        .getText()
-                        .split('\n')
-                        .find((line) => line.trim().length > 0)
-                        ?.trim() || ''
-                const title = firstLine.slice(0, 30) || 'Untitled'
+                // F3：title 权威化——自动保存不再用正文第一行覆盖标题（标题由
+                // 新建/重命名决定，见 useDataStore.renameNote），只保存正文
+                const content = editorInstance.storage.markdown.getMarkdown()
+
+                // T1 修复：把文档里的 cite 节点同步到 cites（→ frontmatter cites，
+                // B8 导出与反向引用依赖它）。全量扫描，删除引用后自动为空。
+                const cites = collectCiteIds(editorInstance.state.doc)
 
                 await saveNote({
                     ...existingNote,
-                    title,
                     content,
+                    cites,
                     updatedAt: Date.now(),
                 })
             }, 600)
@@ -124,6 +128,12 @@ const Editor = () => {
             Superscript,
             Subscript,
             Selection,
+            // UI 重构 T1：placeholder + table（设计稿 E4/E7），underline/link 由 StarterKit v3 内置
+            Placeholder.configure({ placeholder: '开始记录你的研究笔记…' }),
+            Table.configure({ resizable: true }),
+            TableRow,
+            TableHeader,
+            TableCell,
             ImageUploadNode.configure({
                 accept: 'image/*',
                 maxSize: MAX_FILE_SIZE,
@@ -131,6 +141,8 @@ const Editor = () => {
                 upload: handleImageUpload,
                 onError: (error) => console.error('Upload failed:', error),
             }),
+            Cite,
+            Callout,
             Markdown,
         ],
         onUpdate: ({ editor }) => {
@@ -138,16 +150,28 @@ const Editor = () => {
         },
     })
 
-    const rect = useCursorVisibility({
-        editor,
-        overlayHeight: toolbarRef.current?.getBoundingClientRect().height ?? 0,
-    })
-
     useEffect(() => {
         if (!isMobile && mobileView !== 'main') {
             setMobileView('main')
         }
     }, [isMobile, mobileView])
+
+    // T4：代码块语言标签（pre::after 显示 data-lang，参考设计稿 refreshCodeLabels）
+    useEffect(() => {
+        if (!editor) return
+        const refreshCodeLabels = () => {
+            editor.view.dom.querySelectorAll('pre').forEach((pre) => {
+                const code = pre.querySelector('code')
+                const m = code && /language-([\w-]+)/.exec(code.className)
+                pre.setAttribute('data-lang', m ? m[1] : 'code')
+            })
+        }
+        refreshCodeLabels()
+        editor.on('update', refreshCodeLabels)
+        return () => {
+            editor.off('update', refreshCodeLabels)
+        }
+    }, [editor])
 
     useEffect(() => {
         activeNoteIdRef.current = activeNoteId
@@ -204,52 +228,54 @@ const Editor = () => {
     }, [])
 
     return (
-        <div className='flex h-full w-full justify-center'>
-            <div className='simple-editor-wrapper'>
+        /* UI 重构：页头（chip/标题/meta + 格式化工具栏 + 编辑-预览）在 Provider 内，
+           EditorHeader 通过 toolbar prop 承载 Tiptap 格式化按钮组（设计稿：标题下方） */
+        <div className='flex h-full w-full flex-col overflow-hidden'>
+            {/* 未选中笔记 → 空状态页（设计稿 view-empty：HERO 插画 + 快捷操作 + 最近打开；
+                不可输入；hooks 照常执行保持顺序） */}
+            {activeNoteId === undefined ? (
+                <NoteEmptyState />
+            ) : (
                 <EditorContext.Provider value={{ editor }}>
-                    <Toolbar
-                        ref={toolbarRef}
-                        style={{
-                            ...(isMobile
-                                ? {
-                                      bottom: `calc(100% - ${height - rect.y}px)`,
-                                  }
-                                : {}),
-                        }}
-                    >
-                        {mobileView === 'main' ? (
-                            <MainToolbarContent
-                                onHighlighterClick={() => setMobileView('highlighter')}
-                                onLinkClick={() => setMobileView('link')}
-                                isMobile={isMobile}
-                            />
-                        ) : (
-                            <MobileToolbarContent
-                                type={mobileView === 'highlighter' ? 'highlighter' : 'link'}
-                                onBack={() => setMobileView('main')}
-                            />
-                        )}
-                    </Toolbar>
+                <EditorHeader
+                    toolbar={
+                        <div
+                            ref={toolbarRef}
+                            className="flex items-center gap-1 overflow-x-auto py-0.5"
+                        >
+                            {mobileView === 'main' ? (
+                                <MainToolbarContent
+                                    onHighlighterClick={() => setMobileView('highlighter')}
+                                    onLinkClick={() => setMobileView('link')}
+                                    isMobile={isMobile}
+                                />
+                            ) : (
+                                <MobileToolbarContent
+                                    type={mobileView === 'highlighter' ? 'highlighter' : 'link'}
+                                    onBack={() => setMobileView('main')}
+                                />
+                            )}
+                        </div>
+                    }
+                />
 
-                    <div className="flex flex-col h-full overflow-hidden">
+                {/* divider（设计稿：页头与正文分隔） */}
+                <div className="mx-7 h-px shrink-0 bg-border" />
+
+                {/* 正文（统一由 simple-editor-wrapper 滚动；格式化工具已上移至页头） */}
+                <div className='flex min-h-0 flex-1 justify-center'>
+                    <div className='simple-editor-wrapper'>
                         <EditorContent
                             editor={editor}
                             role='presentation'
                             className='simple-editor-content'
                         />
+                        {/* F6：笔记尾参考文献列表（扫描 cite 节点实时渲染） */}
+                        <CitationList editor={editor} />
                     </div>
-
-                    {/* AI 唤醒按钮 */}
-                    <button
-                        onClick={toggleAi}
-                        className={`fixed bottom-8 right-8 p-4 rounded-full shadow-2xl transition-all ${
-                            isOpen ? "bg-purple-600 text-white -translate-x-80" : "bg-white text-purple-600"
-                        }`}
-                    >
-                        <Bot className="h-6 w-6" />
-                    </button>
+                </div>
                 </EditorContext.Provider>
-            </div>
+            )}
         </div>
     )
 }

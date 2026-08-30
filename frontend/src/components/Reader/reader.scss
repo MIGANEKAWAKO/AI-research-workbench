@@ -1,0 +1,69 @@
+// PDF 阅读器 text layer 样式（F5）。
+// 核心：文字层 span 颜色透明（canvas 位图负责显示），但保留可选中性；
+// 选中时用 ::selection 半透明背景给出视觉反馈。样式对齐 pdf.js 官方 text_layer.css 的精简子集。
+//
+// M2 A2 修复（F5 遗留 bug）：pdf.js v6 的 span 字号依赖完整的 CSS 变量链——
+//   --total-scale-factor → --text-scale-factor → font-size: calc(变量 × --font-height)
+//   外加 transform: rotate/scaleX/scale(var(--min-font-size-inv)) 把字号放大后的盒
+//   缩回正确几何（绕过浏览器最小字号限制）。
+// 缺失该链时 span 字号回落浏览器默认 16px → 盒尺寸比实际文本大 → 相邻单词的 span
+// 互相侵入 → 划词选区命中前一个词的 span → 采集文本整体偏移一个词（A2 验收踩坑，
+// 见 docs/面试问答.md ④Q26）。
+// --total-scale-factor 由 PdfPage 内联传入（= 当前缩放 scale，见 pdf-page.tsx）。
+
+.pdf-text-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+    line-height: 1;
+    text-align: initial;
+    cursor: text;
+    transform-origin: 0 0;
+
+    // 官方 CSS 变量链（web/text_layer.css 对应规则）
+    --min-font-size: 1; // 默认值；pdf.js 构造时内联覆盖为实测 1px 字形高度
+    --min-font-size-inv: calc(1 / var(--min-font-size));
+    --total-scale-factor: 1; // PdfPage 内联覆盖为当前 scale
+    --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+    --scale-round-x: 1px;
+    --scale-round-y: 1px;
+
+    span {
+        color: transparent;
+        position: absolute;
+        white-space: pre;
+        transform-origin: 0 0;
+        cursor: text;
+        user-select: text;
+
+        // 官方 span 规则：字号链 + 几何缩放（--font-height/--scale-x/--rotate 由 pdf.js 内联设置）
+        --font-height: 0;
+        font-size: calc(var(--text-scale-factor) * var(--font-height));
+        --scale-x: 1;
+        --rotate: 0deg;
+        transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+    }
+
+    // 标记内容容器不参与布局（官方 display: contents）
+    .markedContent {
+        display: contents;
+    }
+
+    // 透明文字选中时默认高亮不可见，需显式给半透明背景
+    ::selection {
+        background: rgba(99, 102, 241, 0.35);
+    }
+
+    // M2 A1：高亮 mark（包在文本 span 内，inline 背景随文档流定位）
+    .pdf-annotation-highlight {
+        background-color: rgba(250, 204, 21, 0.45);
+        border-radius: 2px;
+        cursor: pointer;
+        color: transparent;
+
+        &:hover {
+            background-color: rgba(250, 204, 21, 0.6);
+        }
+    }
+}

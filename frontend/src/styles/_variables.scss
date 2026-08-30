@@ -252,15 +252,16 @@
 
 /* Highlight colors */
 :root {
-  --tt-color-highlight-yellow: #fef9c3;
-  --tt-color-highlight-green: #dcfce7;
-  --tt-color-highlight-blue: #e0f2fe;
-  --tt-color-highlight-purple: #f3e8ff;
-  --tt-color-highlight-red: #ffe4e6;
-  --tt-color-highlight-gray: rgb(248, 248, 247);
-  --tt-color-highlight-brown: rgb(244, 238, 238);
-  --tt-color-highlight-orange: rgb(251, 236, 221);
-  --tt-color-highlight-pink: rgb(252, 241, 246);
+  /* UI 重构修复：浅色主题下高亮加深（Tailwind 300 级，避免在灰底上对比度过低） */
+  --tt-color-highlight-yellow: #fde047;
+  --tt-color-highlight-green: #86efac;
+  --tt-color-highlight-blue: #7dd3fc;
+  --tt-color-highlight-purple: #d8b4fe;
+  --tt-color-highlight-red: #fca5a5;
+  --tt-color-highlight-gray: rgb(226, 232, 240);
+  --tt-color-highlight-brown: rgb(214, 178, 152);
+  --tt-color-highlight-orange: rgb(253, 186, 116);
+  --tt-color-highlight-pink: rgb(249, 168, 212);
 
   --tt-color-highlight-yellow-contrast: #fbe604;
   --tt-color-highlight-green-contrast: #c7fad8;

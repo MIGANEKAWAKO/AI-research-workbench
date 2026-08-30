@@ -1,16 +1,35 @@
 export type AiTaskType = 'summarize' | 'polish' | 'continue'
 
+import { apiFetch } from './api'
+
+/**
+ * F7：调 /api/chat（B7 起对话模式自动做 RAG 检索注入）。
+ * - taskType 有值 → 任务模式（处理 text，无 RAG）
+ * - taskType 为空 → 对话模式（RAG 全局检索；docId 非空时单篇限定，B7 协议）
+ * SSE 解析逻辑不变。
+ */
 export const fetchAiResponse = async (
   messages: { role: string; content: string }[],
   noteContext: string,
-  taskType: AiTaskType,
+  taskType: AiTaskType | undefined,
   text: string,
-  onChunk: (content: string) => void
+  onChunk: (content: string) => void,
+  docId?: string,
+  conversationId?: string // M2 C2：会话记忆——历史注入上下文 + 新消息落库
 ) => {
-  const response = await fetch('http://localhost:3001/api/chat', {
+  const body: Record<string, unknown> = { messages, noteContext }
+  if (taskType && text.trim()) {
+    body.taskType = taskType
+    body.text = text
+  }
+  if (docId) body.docId = docId
+  // M2 C2 联调对齐：后端解析 camelCase conversationId
+  if (conversationId) body.conversationId = conversationId
+
+  const response = await apiFetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, noteContext, taskType, text }),
+    body: JSON.stringify(body),
   })
 
   if (!response.ok) {

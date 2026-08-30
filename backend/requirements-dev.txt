@@ -1,0 +1,5 @@
+# 测试依赖（A0 引入；A3 的 Mock LLM 全链路测试复用）
+pytest>=8,<9
+
+# P6 打包（Windows 发布安装包的内嵌后端）
+pyinstaller>=6.10,<7
