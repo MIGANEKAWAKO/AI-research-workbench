@@ -1,4 +1,4 @@
-# 依赖与构建产物
+﻿# 依赖与构建产物
 node_modules/
 dist/
 dist-ssr/
@@ -27,5 +27,13 @@ backend/vault/
 .idea
 .DS_Store
 
-# P6 ɳ�� cargo ���棨���Ự���� workaround��
+# 本地临时目录
+.tmp-*/
+.tmp-pip/
 .cargo-home/
+
+# 私人文件（不入库）
+我的简历*.md
+我的简历*.docx
+docs/简历包装/
+docs/Research Agent最小改造方案.md
