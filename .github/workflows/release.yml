@@ -47,11 +47,13 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # tauri build 会自动执行 beforeBuildCommand（npm run build --prefix frontend）
-      # 并打包 resources（backend-server onedir 产物）→ NSIS 安装包
+      # tauri build 会自动执行 beforeBuildCommand（npm run build）并打包
+      # resources（backend-server onedir 产物）→ NSIS 安装包。
+      # 必须走 npm run tauri（package.json script = cd .. && tauri）：
+      # Tauri CLI 不向上查找 src-tauri，直接 npx 会报 app_paths panic。
       - name: Build Tauri app (frontend + Rust + NSIS)
         working-directory: frontend
-        run: npx tauri build --bundles nsis
+        run: npm run tauri -- build --bundles nsis
 
       - name: Generate release notes
         id: notes
