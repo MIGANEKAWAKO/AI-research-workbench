@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Download, FolderOpen, Info, Loader2, Moon, ShieldCheck, Sun, Trash2 } from 'lucide-react'
+import { Download, FolderOpen, Info, KeyRound, Loader2, Moon, ShieldCheck, Sun, Trash2 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
     DropdownMenu,
@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/hooks/use-theme'
 import { ExportDialog } from '@/components/ExportDialog'
+import { ConfigDialog } from '@/components/ConfigDialog'
 import { saveConfig } from '@/services/config'
 import { useNoteStore } from '@/store/useNoteStore'
 import { useDataStore } from '@/store/useDataStore'
@@ -38,6 +39,9 @@ import { useConversationStore } from '@/store/useConversationStore'
 const TopBar = () => {
     const { theme, toggleTheme } = useTheme()
     const [exportOpen, setExportOpen] = useState(false)
+
+    // P6 补缺：AI 服务配置（key/baseUrl；P1 只有首次向导，配置残留/换 key 无入口）
+    const [configOpen, setConfigOpen] = useState(false)
 
     // M2 P1 补充：修改 vault 目录（与首次启动向导同一保存通道 POST /api/config）
     const [vaultOpen, setVaultOpen] = useState(false)
@@ -143,6 +147,13 @@ const TopBar = () => {
                             修改文件保存地址
                         </DropdownMenuItem>
                         <DropdownMenuItem
+                            onClick={() => setConfigOpen(true)}
+                            className="cursor-pointer"
+                        >
+                            <KeyRound className="size-4 text-muted-foreground" />
+                            AI 服务配置
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                             onClick={() => setExportOpen(true)}
                             className="cursor-pointer"
                         >
@@ -168,6 +179,9 @@ const TopBar = () => {
 
             {/* M2 A4：集合级导出对话框（docx 三格式 / BibTeX + 集合过滤） */}
             <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
+
+            {/* P6：AI 服务配置（key/baseUrl + 连通测试，与首次向导同通道） */}
+            <ConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
 
             {/* M2 P1：修改文件保存地址（vault 目录，样式对齐首次启动向导第一步） */}
             <Dialog open={vaultOpen} onOpenChange={setVaultOpen}>

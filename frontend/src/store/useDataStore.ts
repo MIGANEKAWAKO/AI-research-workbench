@@ -100,28 +100,58 @@ interface DataState {
 /** 判断失败是否为网络层错误（fetch 拒绝 = 后端不可达），HTTP 错误（403/404 等）不算离线 */
 const isNetworkError = (e: unknown) => e instanceof TypeError
 
+// P6 体验优化：启动竞态——后端就绪需 5-10s（索引扫描），loadAll 的网络失败
+// 不立即标记离线（避免启动期红色警告闪烁 + 笔记空白），延迟重试；
+// 重试超时（2s × 10 = 20s）仍不可达才标记离线（防"静默失败"）。
+const BACKEND_RETRY_MAX = 10
+const BACKEND_RETRY_MS = 2000
+let backendRetryCount = 0
+
+function scheduleBackendRetry(
+    set: (partial: Partial<DataState>) => void,
+    retry: () => void
+): void {
+    backendRetryCount += 1
+    if (backendRetryCount > BACKEND_RETRY_MAX) {
+        backendRetryCount = 0
+        console.error('无法连接存储服务（后端未启动？）')
+        set({ notes: [], collections: [], backendOnline: false })
+        return
+    }
+    console.warn(`存储服务未就绪（第 ${backendRetryCount} 次），${BACKEND_RETRY_MS / 1000}s 后重试`)
+    setTimeout(retry, BACKEND_RETRY_MS)
+}
+
 export const useDataStore = create<DataState>((set, get) => ({
     notes: [],
     collections: [],
     backendOnline: null,
 
     loadAll: async () => {
-        // 1. 集合定义：读 .kb/collections.json（不存在 → 空）
-        const collections = await loadCollectionsFile()
-        if (collections.length > 0) {
-            nextCollectionId = Math.max(...collections.map((c) => c.id ?? 0)) + 1
+        // 1. 集合定义：读 .kb/collections.json（不存在 → 空）；网络失败 → 重试
+        let collections: Collection[] = []
+        try {
+            collections = await loadCollectionsFile()
+            if (collections.length > 0) {
+                nextCollectionId = Math.max(...collections.map((c) => c.id ?? 0)) + 1
+            }
+        } catch (e) {
+            if (isNetworkError(e)) {
+                scheduleBackendRetry(set, () => { void get().loadAll() })
+                return
+            }
+            collections = []
         }
         const nameToId = (name?: string) =>
             collections.find((c) => c.name === name)?.id
 
-        // 2. 扫描笔记目录；网络失败 → 标记离线并降级为空列表；目录不存在 → 创建
+        // 2. 扫描笔记目录；网络失败 → 重试；目录不存在 → 创建
         let entries: FsEntry[] = []
         try {
             entries = await adapter.list(NOTES_DIR)
         } catch (e) {
             if (isNetworkError(e)) {
-                console.error('无法连接存储服务（后端未启动？）', e)
-                set({ notes: [], collections, backendOnline: false })
+                scheduleBackendRetry(set, () => { void get().loadAll() })
                 return
             }
             await adapter.mkdir(NOTES_DIR).catch(() => {})
@@ -150,6 +180,7 @@ export const useDataStore = create<DataState>((set, get) => ({
                 console.warn(`读取笔记失败，跳过: ${entry.path}`, e)
             }
         }
+        backendRetryCount = 0
         set({ notes, collections, backendOnline: true })
     },
 
